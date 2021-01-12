@@ -102,7 +102,6 @@ void sieve_work_fcn(void *vptr)
     soe_userdata_t *udata = (soe_userdata_t *)tdata->user_data;
     soe_staticdata_t *sdata = udata->sdata;
     thread_soedata_t *t = &udata->ddata[tdata->tindex];
-    int i;
 
     if ((sdata->only_count == 0) || (sdata->num_bitmap_primes > 0))
     {
@@ -129,7 +128,6 @@ void bitmap_sync(void *vptr)
 {
     tpool_t *tdata = (tpool_t *)vptr;
     bitmap_userdata_t *udata = (bitmap_userdata_t *)tdata->user_data;
-    soe_staticdata_t *sdata = udata->sdata;
     thread_soedata_t *t = &udata->ddata[tdata->tindex];
 
     t->startid = t->stopid;
@@ -141,7 +139,6 @@ void bitmap_dispatch(void *vptr)
 {
     tpool_t *tdata = (tpool_t *)vptr;
     bitmap_userdata_t *udata = (bitmap_userdata_t *)tdata->user_data;
-    soe_staticdata_t *sdata = udata->sdata;
     thread_soedata_t *t = &udata->ddata[tdata->tindex];
 
     if (t->startid != t->stopid)
@@ -170,8 +167,8 @@ void bitmap_2class_work_fcn(void *vptr)
     uint32_t **res_nearest_class = udata->res_nearest_class;
     int **res_classtab = udata->res_classtab;
 
-    uint64_t llimit = sdata->lowlimit + (uint64_t)t->startid * (uint64_t)sdata->prodN * FLAGSIZE;
-    uint64_t hlimit = sdata->lowlimit + (uint64_t)t->stopid * (uint64_t)sdata->prodN * FLAGSIZE;
+    uint64_t llimit = sdata->lowlimit + (uint64_t)t->startid * (uint64_t)sdata->prodN * sdata->FLAGSIZE;
+    uint64_t hlimit = sdata->lowlimit + (uint64_t)t->stopid * (uint64_t)sdata->prodN * sdata->FLAGSIZE;
 
     if (hlimit > sdata->orig_hlimit)
         hlimit = sdata->orig_hlimit;
@@ -208,8 +205,8 @@ void bitmap_2class_work_fcn(void *vptr)
 
         while (bloc < interval)
         {
-            uint32_t brloc = t->startid * FLAGSIZE + (bloc - bclass) / 6;
-            sdata->lines[res_table[bclass]][brloc >> 3] &= masks[brloc & 7];
+            uint32_t brloc = t->startid * sdata->FLAGSIZE + (bloc - bclass) / 6;
+            sdata->lines[res_table[bclass]][brloc >> 3] &= sdata->masks[brloc & 7];
 
             bloc += (uint64_t)res_steps[bclassnum] * (uint64_t)prime;
 
@@ -225,20 +222,20 @@ void bitmap_2class_work_fcn(void *vptr)
         uint32_t prime = sdata->sieve_p[i];
         int pclass = res_table[prime % 6];    // residue class of current prime
         int bclass;                 // residue class of current bit
-        int bclassnum;              // column in residue_pattern_mod30 of bclass
+        //int bclassnum;              // column in residue_pattern_mod30 of bclass
 
         // first bit offset above lowlimit
         bloc = prime - llimit % prime;
 
         // get it on a residue class
-        bclassnum = res_nearest_class[pclass][bloc % 6];
+        //bclassnum = res_nearest_class[pclass][bloc % 6];
         bloc = bloc + (uint64_t)res_nearest[pclass][bloc % 6] * (uint64_t)prime;
         bclass = bloc % 6;
 
         if (bloc < interval)
         {
-            uint32_t brloc = t->startid * FLAGSIZE + (bloc - bclass) / 6;
-            sdata->lines[res_table[bclass]][brloc >> 3] &= masks[brloc & 7];
+            uint32_t brloc = t->startid * sdata->FLAGSIZE + (bloc - bclass) / 6;
+            sdata->lines[res_table[bclass]][brloc >> 3] &= sdata->masks[brloc & 7];
         }
     }
 
@@ -259,8 +256,8 @@ void bitmap_8class_work_fcn(void *vptr)
     uint32_t **res_nearest_class = udata->res_nearest_class;
     int **res_classtab = udata->res_classtab;
 
-    uint64_t llimit = sdata->lowlimit + (uint64_t)t->startid * (uint64_t)sdata->prodN * FLAGSIZE;
-    uint64_t hlimit = sdata->lowlimit + (uint64_t)t->stopid * (uint64_t)sdata->prodN * FLAGSIZE;
+    uint64_t llimit = sdata->lowlimit + (uint64_t)t->startid * (uint64_t)sdata->prodN * sdata->FLAGSIZE;
+    uint64_t hlimit = sdata->lowlimit + (uint64_t)t->stopid * (uint64_t)sdata->prodN * sdata->FLAGSIZE;
 
     if (hlimit > sdata->orig_hlimit)
         hlimit = sdata->orig_hlimit;
@@ -300,8 +297,8 @@ void bitmap_8class_work_fcn(void *vptr)
             // bclassnum to select the correct line.  The classnum is easy
             // to track, but the division in the bit location calculation 
             // could be a problem.
-            uint32_t brloc = t->startid * FLAGSIZE + (bloc - bclass) / 30;
-            sdata->lines[res_table[bclass]][brloc >> 3] &= masks[brloc & 7];
+            uint32_t brloc = t->startid * sdata->LAGSIZE + (bloc - bclass) / 30;
+            sdata->lines[res_table[bclass]][brloc >> 3] &= sdata->masks[brloc & 7];
 
             // increment the bit offset to the next valid residue class
             bloc += (uint64_t)res_steps[bclassnum] * (uint64_t)prime;
@@ -321,20 +318,20 @@ void bitmap_8class_work_fcn(void *vptr)
         uint32_t prime = sdata->sieve_p[i];
         int pclass = res_table[prime % 30];    // residue class of current prime
         int bclass;                 // residue class of current bit
-        int bclassnum;              // column in residue_pattern_mod30 of bclass
+        //int bclassnum;              // column in residue_pattern_mod30 of bclass
 
         // first bit offset above lowlimit
         bloc = prime - llimit % prime;
 
         // get it on a residue class
-        bclassnum = res_nearest_class[pclass][bloc % 30];
+        //bclassnum = res_nearest_class[pclass][bloc % 30];
         bloc = bloc + (uint64_t)res_nearest[pclass][bloc % 30] * (uint64_t)prime;
         bclass = bloc % 30;
 
         if (bloc < interval)
         {
-            uint32_t brloc = t->startid * FLAGSIZE + (bloc - bclass) / 30;
-            sdata->lines[res_table[bclass]][brloc >> 3] &= masks[brloc & 7];
+            uint32_t brloc = t->startid * sdata->FLAGSIZE + (bloc - bclass) / 30;
+            sdata->lines[res_table[bclass]][brloc >> 3] &= sdata->masks[brloc & 7];
         }
     }
 
@@ -355,8 +352,8 @@ void bitmap_48class_work_fcn(void *vptr)
     uint32_t **res_nearest_class = udata->res_nearest_class;
     int **res_classtab = udata->res_classtab;
 
-    uint64_t llimit = sdata->lowlimit + (uint64_t)t->startid * sdata->prodN * FLAGSIZE;
-    uint64_t hlimit = sdata->lowlimit + (uint64_t)t->stopid * sdata->prodN * FLAGSIZE;
+    uint64_t llimit = sdata->lowlimit + (uint64_t)t->startid * sdata->prodN * sdata->FLAGSIZE;
+    uint64_t hlimit = sdata->lowlimit + (uint64_t)t->stopid * sdata->prodN * sdata->FLAGSIZE;
 
     if (hlimit > sdata->orig_hlimit)
         hlimit = sdata->orig_hlimit;
@@ -389,8 +386,8 @@ void bitmap_48class_work_fcn(void *vptr)
 
         while (bloc < interval)
         {
-            uint64_t brloc = (uint64_t)t->startid * FLAGSIZE + (bloc - (uint64_t)bclass) / 210ULL;
-            sdata->lines[res_table[bclass]][brloc >> 3ULL] &= masks[brloc & 7ULL];
+            uint64_t brloc = (uint64_t)t->startid * sdata->FLAGSIZE + (bloc - (uint64_t)bclass) / 210ULL;
+            sdata->lines[res_table[bclass]][brloc >> 3ULL] &= sdata->masks[brloc & 7ULL];
 
             bloc += ((uint64_t)res_steps[bclassnum] * (uint64_t)prime);
 
@@ -407,20 +404,20 @@ void bitmap_48class_work_fcn(void *vptr)
         uint32_t prime = sdata->sieve_p[i];
         int pclass = res_table[prime % 210];    // residue class of current prime
         int bclass;                 // residue class of current bit
-        int bclassnum;              // column in residue_pattern_mod30 of bclass
+        //int bclassnum;              // column in residue_pattern_mod30 of bclass
 
         // first bit offset above lowlimit
         bloc = prime - llimit % prime;
 
         // get it on a residue class
-        bclassnum = res_nearest_class[pclass][bloc % 210];
+        //bclassnum = res_nearest_class[pclass][bloc % 210];
         bloc = bloc + (uint64_t)res_nearest[pclass][bloc % 210] * (uint64_t)prime;
         bclass = bloc % 210;
 
         if (bloc < interval)
         {
-            uint64_t brloc = (uint64_t)t->startid * FLAGSIZE + (bloc - (uint64_t)bclass) / 210ULL;
-            sdata->lines[res_table[bclass]][brloc >> 3] &= masks[brloc & 7];
+            uint64_t brloc = (uint64_t)t->startid * sdata->FLAGSIZE + (bloc - (uint64_t)bclass) / 210ULL;
+            sdata->lines[res_table[bclass]][brloc >> 3] &= sdata->masks[brloc & 7];
         }
     }
 
@@ -428,9 +425,8 @@ void bitmap_48class_work_fcn(void *vptr)
 }
 
 
-uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
-	uint64_t lowlimit, uint64_t *highlimit, int count, uint64_t *primes,
-    int VFLAG, int THREADS)
+uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
+	uint64_t lowlimit, uint64_t *highlimit, int count, uint64_t *primes)
 {
 	/*
 	if count == 1, then the primes are simply counted, and not 
@@ -440,22 +436,24 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
 
 	in either case, return the number of primes found
 	*/
-    //timing
+    // timing
     double t;
     struct timeval tstart, tstop;
 
-	//keep track of how much memory we've used
+	// keep track of how much memory we've used
 	uint64_t allocated_bytes = 0;
 
-	//structure of static info
-	soe_staticdata_t sdata;
+	// structure of static info
+    uint32_t* sieve_p = sdata->sieve_p;
+    uint32_t num_sp = sdata->num_sp;
+    int VFLAG = sdata->VFLAG;
+    int THREADS = sdata->THREADS;
 
 	//thread data holds all data needed during sieving
 	thread_soedata_t *thread_data;		//an array of thread data objects
 
 	//*********************** BEGIN ******************************//
-    sdata.VFLAG = VFLAG;
-    sdata.THREADS = THREADS;
+    sdata->only_count = count;
 
     if (VFLAG > 1)
     {
@@ -463,54 +461,60 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
     }
 
 	// sanity check the input
-	sdata.only_count = count;
-	if (check_input(*highlimit, lowlimit, num_sp, sieve_p, &sdata, *offset))
+	if (check_input(*highlimit, lowlimit, num_sp, sieve_p, sdata, *offset))
 		return 0;
 
 	// determine what kind of sieve to use based on the input
-	get_numclasses(*highlimit, lowlimit, &sdata);
+	get_numclasses(*highlimit, lowlimit, sdata);
 
 	// allocate and initialize some stuff
-	allocated_bytes += init_sieve(&sdata);
-	*highlimit = sdata.highlimit;
+	allocated_bytes += init_sieve(sdata);
+	*highlimit = sdata->highlimit;
 	
 	// allocate thread data structure
 	thread_data = (thread_soedata_t *)malloc(THREADS * sizeof(thread_soedata_t));
 
 	// find all roots of prime with prodN.  These are used when finding offsets.
-	getRoots(&sdata, thread_data);
+	getRoots(sdata, thread_data);
 
 	// init bucket sieving
-	set_bucket_depth(&sdata);
+	set_bucket_depth(sdata);
 
 	// initialize stuff used in thread structures.
 	// this is necessary even if THREADS = 1;	
-	allocated_bytes += alloc_threaddata(&sdata, thread_data);
+	allocated_bytes += alloc_threaddata(sdata, thread_data);
 
 	if (VFLAG > 2)
 	{	
-		printf("finding requested range %" PRIu64 " to %" PRIu64 "\n",sdata.orig_llimit,sdata.orig_hlimit);
-		printf("sieving range %" PRIu64 " to %" PRIu64 "\n",sdata.lowlimit,*highlimit);
-		printf("using %" PRIu64 " primes, max prime = %" PRIu64 "  \n",sdata.pboundi,sdata.pbound);
-		printf("using %u residue classes\n",sdata.numclasses);
+		printf("finding requested range %" PRIu64 " to %" PRIu64 "\n",
+            sdata->orig_llimit,sdata->orig_hlimit);
+		printf("sieving range %" PRIu64 " to %" PRIu64 "\n",
+            sdata->lowlimit,*highlimit);
+		printf("using %" PRIu64 " primes, max prime = %" PRIu64 "  \n", 
+            sdata->pboundi,sdata->pbound);
+		printf("using %u residue classes\n",sdata->numclasses);
 
-        if (sdata.use_monty)
+        if (sdata->use_monty)
             printf("using Montgomery enabled offset computations\n");
 
-		printf("lines have %" PRIu64 " bytes and %" PRIu64 " flags\n",sdata.numlinebytes,sdata.numlinebytes * 8);
-		printf("lines broken into = %" PRIu64 " blocks of size %u\n",sdata.blocks,SOEBLOCKSIZE);
-		printf("blocks contain %u flags and span %" PRIu64 " integers\n", FLAGSIZE, sdata.blk_r);
-		if (sdata.num_bucket_primes > 0)
+		printf("lines have %" PRIu64 " bytes and %" PRIu64 " flags\n",
+            sdata->numlinebytes,sdata->numlinebytes * 8);
+		printf("lines broken into = %" PRIu64 " blocks of size %u\n",
+            sdata->blocks, sdata->SOEBLOCKSIZE);
+		printf("blocks contain %u flags and span %" PRIu64 " integers\n", 
+            sdata->FLAGSIZE, sdata->blk_r);
+        
+        if (sdata->num_bucket_primes > 0)
 		{
 			printf("bucket sieving %u primes > %u\n",
-				sdata.num_bucket_primes,sdata.sieve_p[sdata.bucket_start_id]);
-			printf("allocating space for %u hits per bucket\n",sdata.bucket_alloc);
-			printf("allocating space for %u hits per large bucket\n",sdata.large_bucket_alloc);
+				sdata->num_bucket_primes, sdata->sieve_p[sdata->bucket_start_id]);
+			printf("allocating space for %u hits per bucket\n", sdata->bucket_alloc);
+			printf("allocating space for %u hits per large bucket\n", sdata->large_bucket_alloc);
 		}
-		if (sdata.num_bitmap_primes > 0)
+		if (sdata->num_bitmap_primes > 0)
 		{
 			printf("bitmap sieving %u primes > %u\n",
-				sdata.num_bitmap_primes, sdata.sieve_p[sdata.bitmap_start_id]);
+				sdata->num_bitmap_primes, sdata->sieve_p[sdata->bitmap_start_id]);
 		}
 		printf("using %" PRIu64 " bytes for sieving storage\n",allocated_bytes);
 	}
@@ -526,10 +530,10 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
         }
     }
 
-    if (sdata.num_bitmap_primes > 0)
+    if (sdata->num_bitmap_primes > 0)
     {
-        uint8_t *line = sdata.lines[0];
-        uint32_t linesize = FLAGSIZE * sdata.blocks;
+        uint8_t *line = sdata->lines[0];
+        uint32_t linesize = sdata->FLAGSIZE * sdata->blocks;
         int i;
 
         int *res_table;
@@ -541,8 +545,8 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
         tpool_t *tpool_data;
         bitmap_userdata_t udata;        
 
-        int threads = MIN(sdata.blocks, THREADS);
-        int blocks_per_thread = sdata.blocks / threads;
+        int threads = MIN(sdata->blocks, THREADS);
+        int blocks_per_thread = sdata->blocks / threads;
         uint32_t b = 0;
 
 		if (VFLAG > 1)
@@ -551,54 +555,54 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
             printf("commencing bitmap sieve\n");
 		}
 
-        res_table = (int *)malloc(sdata.prodN * sizeof(int));
-        memset(res_table, -1, sdata.prodN * sizeof(int));
-        for (i = 0; i < sdata.numclasses; i++)
-            res_table[sdata.rclass[i]] = i;
+        res_table = (int *)malloc(sdata->prodN * sizeof(int));
+        memset(res_table, -1, sdata->prodN * sizeof(int));
+        for (i = 0; i < sdata->numclasses; i++)
+            res_table[sdata->rclass[i]] = i;
 
 		if (VFLAG > 3)
 		{
 			printf("res_table: ");
-			for (i = 0; i < sdata.prodN; i++)
+			for (i = 0; i < sdata->prodN; i++)
 			{
 				printf("%d ", res_table[i]);
-				if (i & 7 == 0)
+				if ((i & 7) == 0)
 					printf("\n");
 			}
 			printf("\n");
 		}
 		
-        res_steps = (int *)malloc(sdata.numclasses * sizeof(int));
-        for (i = 1; i < sdata.numclasses; i++)
-            res_steps[i - 1] = sdata.rclass[i] - sdata.rclass[i - 1];
-        res_steps[i - 1] = sdata.prodN - sdata.rclass[i - 1] + 1;
+        res_steps = (int *)malloc(sdata->numclasses * sizeof(int));
+        for (i = 1; i < sdata->numclasses; i++)
+            res_steps[i - 1] = sdata->rclass[i] - sdata->rclass[i - 1];
+        res_steps[i - 1] = sdata->prodN - sdata->rclass[i - 1] + 1;
 
 		if (VFLAG > 3)
 		{
 			printf("res_steps: ");
-			for (i = 0; i < sdata.numclasses; i++)
+			for (i = 0; i < sdata->numclasses; i++)
 			{
-				printf("%d ", sdata.rclass[i]);
-				if (i & 7 == 0)
+				printf("%d ", sdata->rclass[i]);
+				if ((i & 7) == 0)
 					printf("\n");
 			}
 			printf("\n");
 		}
 
-        res_classtab = (int **)malloc(sdata.numclasses * sizeof(int *));
-        for (i = 0; i < sdata.numclasses; i++)
+        res_classtab = (int **)malloc(sdata->numclasses * sizeof(int *));
+        for (i = 0; i < sdata->numclasses; i++)
         {
             int j;
-            res_classtab[i] = (int *)malloc(sdata.numclasses * sizeof(int));
-            res_classtab[i][0] = sdata.rclass[i];
-            for (j = 1; j < sdata.numclasses; j++)
+            res_classtab[i] = (int *)malloc(sdata->numclasses * sizeof(int));
+            res_classtab[i][0] = sdata->rclass[i];
+            for (j = 1; j < sdata->numclasses; j++)
                 res_classtab[i][j] = (res_classtab[i][j-1] + 
-                sdata.rclass[i] * res_steps[j-1]) % sdata.prodN;
+                sdata->rclass[i] * res_steps[j-1]) % sdata->prodN;
 
 			if (VFLAG > 3)
 			{
 				printf("res_classtab[%d]: ", i);
-				for (j = 0; j < sdata.numclasses; j++)
+				for (j = 0; j < sdata->numclasses; j++)
 				{
 					printf("%d ", res_classtab[i][j]);
 				}
@@ -606,15 +610,15 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
 			}
         }
 
-        res_nearest = (uint32_t **)malloc(sdata.numclasses * sizeof(uint32_t *));
-        res_nearest_class = (uint32_t **)malloc(sdata.numclasses * sizeof(uint32_t *));
-        for (i = 0; i < sdata.numclasses; i++)
+        res_nearest = (uint32_t **)malloc(sdata->numclasses * sizeof(uint32_t *));
+        res_nearest_class = (uint32_t **)malloc(sdata->numclasses * sizeof(uint32_t *));
+        for (i = 0; i < sdata->numclasses; i++)
         {
             int j;
-            res_nearest[i] = (uint32_t *)malloc(sdata.prodN * sizeof(uint32_t));
-            res_nearest_class[i] = (uint32_t *)malloc(sdata.prodN * sizeof(uint32_t));
+            res_nearest[i] = (uint32_t *)malloc(sdata->prodN * sizeof(uint32_t));
+            res_nearest_class[i] = (uint32_t *)malloc(sdata->prodN * sizeof(uint32_t));
 
-            for (j = 0; j < sdata.prodN; j++)
+            for (j = 0; j < sdata->prodN; j++)
             {
                 int k;
                 uint32_t x = j;
@@ -622,11 +626,11 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
                 while (res_table[x] < 0)
                 {
                     res_nearest[i][j]++;
-                    x += sdata.rclass[i];
-                    if (x >= sdata.prodN) x -= sdata.prodN;
+                    x += sdata->rclass[i];
+                    if (x >= sdata->prodN) x -= sdata->prodN;
                 }
 
-                for (k = 0; k < sdata.numclasses; k++)
+                for (k = 0; k < sdata->numclasses; k++)
                     if (res_classtab[i][k] == x)
                         res_nearest_class[i][j] = k;
             }
@@ -635,10 +639,10 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
 		if (VFLAG > 3)
 		{
 			printf("res_nearest: ");
-			for (i = 0; i < sdata.numclasses; i++)
+			for (i = 0; i < sdata->numclasses; i++)
 			{
 				int j;
-				for (j = 0; j < sdata.prodN; j++)
+				for (j = 0; j < sdata->prodN; j++)
 				{
 					printf("%d ", res_nearest[i][j]);
 				}
@@ -646,12 +650,12 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
 			}
 		}
 
-        memset(line, 255, linesize * sdata.numclasses / 8);
+        memset(line, 255, linesize * sdata->numclasses / 8);
 
         if (VFLAG > 1)
         {
             printf("commencing bitmap sieve starting at sieve prime index %u\n", 
-                sdata.bitmap_start_id);
+                sdata->bitmap_start_id);
         }
 
         /*
@@ -664,13 +668,13 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
         is all that needs to change (and interval, of course).
         */
 
-        if (sdata.numclasses == 480)
+        if (sdata->numclasses == 480)
         {
             printf("bitmap sieving should only be enabled with 2,8,or 48 classes!\n");
             exit(1);
         }
 
-        udata.sdata = &sdata;
+        udata.sdata = sdata;
         udata.ddata = thread_data;
         udata.res_classtab = res_classtab;
         udata.res_nearest = res_nearest;
@@ -686,9 +690,9 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
             thread_data[i].startid = b;
             thread_data[i].stopid = b + blocks_per_thread;
         }
-        thread_data[i - 1].stopid = sdata.blocks;
+        thread_data[i - 1].stopid = sdata->blocks;
 
-        if (sdata.numclasses == 2)
+        if (sdata->numclasses == 2)
         {
             if (threads > 1)
             {
@@ -698,7 +702,7 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
             else
                 bitmap_2class_work_fcn(tpool_data);
         }
-        else if (sdata.numclasses == 8)
+        else if (sdata->numclasses == 8)
         {
             if (threads > 1)
             {
@@ -708,7 +712,7 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
             else
                 bitmap_8class_work_fcn(tpool_data);
         }
-        else if (sdata.numclasses == 48)
+        else if (sdata->numclasses == 48)
         {            
             if (threads > 1)
             {
@@ -723,7 +727,7 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
 
         free(res_table);
         free(res_steps);
-        for (i = 0; i < sdata.numclasses; i++)
+        for (i = 0; i < sdata->numclasses; i++)
         {
             free(res_classtab[i]);
             free(res_nearest[i]);
@@ -746,21 +750,20 @@ uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset,
     }
 
     //printf("commencing sieve from %lu - %lu (originally %lu - %lu)\n",
-    //    sdata.lowlimit, sdata.highlimit, sdata.orig_llimit, sdata.orig_hlimit);
+    //    sdata->lowlimit, sdata->highlimit, sdata->orig_llimit, sdata->orig_hlimit);
 
 	//get 'r done.
-	do_soe_sieving(&sdata, thread_data, count);
+	do_soe_sieving(sdata, thread_data, count);
 
 	//finish up
-	finalize_sieve(&sdata, thread_data, count, primes);
+	finalize_sieve(sdata, thread_data, count, primes);
 
-	return sdata.num_found;
+	return sdata->num_found;
 }
 
 void do_soe_sieving(soe_staticdata_t *sdata, thread_soedata_t *thread_data, int count)
 {
-	uint64_t i,j,k,num_p=0;
-	uint64_t numclasses = sdata->numclasses;
+	uint64_t i;
 	//timing
 	double t;
 	struct timeval tstart, tstop;
@@ -841,20 +844,30 @@ void finalize_sieve(soe_staticdata_t *sdata,
 				sdata->min_sieved_val = 0;
 			}
 		}
-		else
-			ui_offset = 0;
+        else
+        {
+            ui_offset = 0;
+        }
 		
-		if (sdata->sieve_range)
-			sdata->min_sieved_val += ui_offset;
+        if (sdata->sieve_range)
+        {
+            sdata->min_sieved_val += ui_offset;
+        }
 
-        printf("num_found = %lu\n", num_p);
+        if (sdata->VFLAG > 2)
+        {
+            printf("num_found by main sieve = %lu\n", num_p);
+        }
 
 		// PRIMES is already sized appropriately by the wrapper
 		// load in the sieve primes that we need
         //printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
 
 		i = 0;
-        //printf("adding sieve primes to count\n");
+        if (sdata->VFLAG > 2)
+        {
+            printf("adding sieve primes to count\n");
+        }
 		while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
 		{
             if (sdata->sieve_p[i] >= (sdata->orig_llimit + ui_offset))
@@ -864,7 +877,10 @@ void finalize_sieve(soe_staticdata_t *sdata,
             }
 			i++;
 		}
-        //printf("\n");
+        if (sdata->VFLAG > 2)
+        {
+            printf("num_found total = %lu\n", num_p);
+        }
 	}
 	else
 	{

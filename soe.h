@@ -29,6 +29,7 @@ SOFTWARE.
 #include "threadpool.h"
 #include "immintrin.h"
 #include "gmp.h"
+#include "util.h"
 
 #define USE_SOE_THREADPOOL
 #define BITSINBYTE 8
@@ -280,19 +281,6 @@ static __inline __m256i vec_to_monty(__m256i x, __m256i r2, __m256i pinv, __m256
 
 typedef struct
 {
-	uint16_t loc;
-	uint8_t mask;
-	uint8_t bnum;
-} soe_bucket_t_old;
-
-//typedef struct
-//{
-//	uint32_t root;
-//	uint32_t prime;
-//} soe_bucket_t;
-
-typedef struct
-{
 	//uint32_t prime;		// the prime, so that we don't have to also look in the
 						// main prime array
 	uint32_t bitloc;		// bit location of the current hit
@@ -308,6 +296,7 @@ typedef struct
     int THREADS;
     int sync_count;
 	uint32_t *sieve_p;
+    uint32_t num_sp;
 	int *root;
 	uint32_t *lower_mod_prime;
 
@@ -359,6 +348,21 @@ typedef struct
     // Montgomery arithmetic setup costs (reduction for each prime
     // is only performed twice).
     int use_monty;
+
+    // masks for removing or reading single bits in a byte.  nmasks are simply
+    // the negation of these masks, and are filled in within the spSOE function.
+    uint8_t masks[8];
+    uint8_t nmasks[8];
+    uint32_t masks32[32];
+    uint32_t nmasks32[32];
+    uint32_t max_bucket_usage;
+    uint64_t GLOBAL_OFFSET;
+    int NO_STORE;
+    uint32_t SOEBLOCKSIZE;
+    uint32_t FLAGSIZE;
+    uint32_t FLAGSIZEm1;
+    uint32_t FLAGBITS;
+    uint32_t BUCKETSTARTI;
 
 } soe_staticdata_t;
 
@@ -471,10 +475,14 @@ static __inline uint32_t to_monty_loc(uint32_t x, uint32_t r2, uint32_t pinv, ui
 }
 
 
-// top level sieving code
-uint64_t spSOE(uint32_t *sieve_p, uint32_t num_sp, mpz_t *offset, 
-	uint64_t lowlimit, uint64_t *highlimit, int count, uint64_t *primes,
-    int VFLAG, int THREADS);
+// interface functions
+extern soe_staticdata_t* soe_init(int vflag, int threads, int blocksize);
+extern void soe_finalize(soe_staticdata_t* sdata);
+extern uint64_t* soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highlimit,
+    int count, uint64_t* num_p, int PRIMES_TO_FILE, int PRIMES_TO_SCREEN);
+extern uint64_t* sieve_to_depth(soe_staticdata_t* sdata,
+    mpz_t lowlimit, mpz_t highlimit, int count, int num_witnesses, uint64_t* num_p,
+    int PRIMES_TO_FILE, int PRIMES_TO_SCREEN);
 
 // thread ready sieving functions
 void sieve_line(thread_soedata_t *thread_data);
@@ -510,15 +518,11 @@ void *soe_worker_thread_main(void *thread_data);
 // routines for finding small numbers of primes; seed primes for main SOE
 uint32_t tiny_soe(uint32_t limit, uint32_t *primes);
 
-// interface functions
-uint64_t *GetPRIMESRange(uint32_t *sieve_p, uint32_t num_sp, 
-	mpz_t *offset, uint64_t lowlimit, uint64_t highlimit, uint64_t *num_p,
-    int VFLAG, int THREADS);
-uint64_t *soe_wrapper(uint64_t lowlimit, uint64_t highlimit, int count, uint64_t* num_p,
-    int VFLAG, int THREADS, int PRIMES_TO_FILE, int PRIMES_TO_SCREEN);
-uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp, 
-	mpz_t lowlimit, mpz_t highlimit, int count, int num_witnesses, uint64_t *num_p,
-    int VFLAG, int THREADS, int PRIMES_TO_FILE, int PRIMES_TO_SCREEN);
+// top level sieving routines
+uint64_t* GetPRIMESRange(soe_staticdata_t* sdata, 
+    mpz_t* offset, uint64_t lowlimit, uint64_t highlimit, uint64_t* num_p);
+uint64_t spSOE(soe_staticdata_t* sdata, mpz_t* offset,
+    uint64_t lowlimit, uint64_t* highlimit, int count, uint64_t* primes);
 
 // misc and helper functions
 uint64_t estimate_primes_in_range(uint64_t lowlimit, uint64_t highlimit);
@@ -549,36 +553,6 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
 uint32_t (*compute_8_bytes_ptr)(soe_staticdata_t *, uint32_t, uint64_t *, uint64_t);
 
 
-//masks for removing or reading single bits in a byte.  nmasks are simply
-//the negation of these masks, and are filled in within the spSOE function.
-static const uint8_t masks[8] = {0xfe, 0xfd, 0xfb, 0xf7, 0xef, 0xdf, 0xbf, 0x7f};
-static const uint8_t nmasks[8] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
-static const uint32_t masks32[32] = { 
-    0xfffffffe, 0xfffffffd, 0xfffffffb, 0xfffffff7, 
-    0xffffffef, 0xffffffdf, 0xffffffbf, 0xffffff7f,
-    0xfffffeff, 0xfffffdff, 0xfffffbff, 0xfffff7ff,
-    0xffffefff, 0xffffdfff, 0xffffbfff, 0xffff7fff,
-    0xfffeffff, 0xfffdffff, 0xfffbffff, 0xfff7ffff,
-    0xffefffff, 0xffdfffff, 0xffbfffff, 0xff7fffff,
-    0xfeffffff, 0xfdffffff, 0xfbffffff, 0xf7ffffff,
-    0xefffffff, 0xdfffffff, 0xbfffffff, 0x7fffffff};
-static const uint32_t nmasks32[32] = { 
-    0x00000001, 0x00000002, 0x00000004, 0x00000008, 
-    0x00000010, 0x00000020, 0x00000040, 0x00000080,
-    0x00000100, 0x00000200, 0x00000400, 0x00000800,
-    0x00001000, 0x00002000, 0x00004000, 0x00008000, 
-    0x00010000, 0x00020000, 0x00040000, 0x00080000, 
-    0x00100000, 0x00200000, 0x00400000, 0x00800000, 
-    0x01000000, 0x02000000, 0x04000000, 0x08000000, 
-    0x10000000, 0x20000000, 0x40000000, 0x80000000};
-uint32_t max_bucket_usage;
-uint64_t GLOBAL_OFFSET;
-int NO_STORE;
 
-uint32_t SOEBLOCKSIZE;
-uint32_t FLAGSIZE;
-uint32_t FLAGSIZEm1;
-uint32_t FLAGBITS;
-uint32_t BUCKETSTARTI;
 
 #endif // YAFU_SOE_H

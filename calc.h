@@ -113,12 +113,12 @@ int pop(str_t* str, bstack_t* stack);
 // of the calculator.
 typedef struct
 {
-
-
+    int dummy;
 } meta_t;
 
 // arbitrary precision calculator interface
-extern int process_expression(char *input_exp, meta_t* metadata);
+extern int process_expression(char* input_exp, meta_t* metadata,
+    int force_quiet, int no_convert_result);
 extern void reset_preprocessor(void);
 extern void calc_finalize();
 extern int calc_init();

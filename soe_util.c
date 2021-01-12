@@ -28,6 +28,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <math.h>
 
 #ifdef USE_AVX512F
 ALIGNED_MEM uint64_t presieve_largemasks[16][173][8];
@@ -305,17 +306,17 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
     sdata->use_monty = 0;
 
 	sieve_line_ptr = &sieve_line;
-    FLAGBITS = 18;
-    BUCKETSTARTI = 33336;
+    sdata->FLAGBITS = 18;
+    sdata->BUCKETSTARTI = 33336;
 
-	FLAGSIZE = 8 * SOEBLOCKSIZE;
-	FLAGSIZEm1 = FLAGSIZE - 1;
+    sdata->FLAGSIZE = 8 * sdata->SOEBLOCKSIZE;
+    sdata->FLAGSIZEm1 = sdata->FLAGSIZE - 1;
 
-    switch (SOEBLOCKSIZE)
+    switch (sdata->SOEBLOCKSIZE)
     {
     case 32768:
-        FLAGBITS = 18;
-        BUCKETSTARTI = 33336;
+        sdata->FLAGBITS = 18;
+        sdata->BUCKETSTARTI = 33336;
 
         // the avx2 version is faster on avx512 capable cpus...
 #ifdef USE_AVX512Fa
@@ -325,12 +326,12 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
 #endif
         break;
     case 65536:
-        FLAGBITS = 19;
-        BUCKETSTARTI = 43392;
+        sdata->FLAGBITS = 19;
+        sdata->BUCKETSTARTI = 43392;
         break;
     case 131072:
-        FLAGBITS = 20;
-        BUCKETSTARTI = 123040;
+        sdata->FLAGBITS = 20;
+        sdata->BUCKETSTARTI = 123040;
 #ifdef USE_AVX512F
         sieve_line_ptr = &sieve_line_avx512_128k;
 #elif defined(USE_AVX2)
@@ -343,8 +344,8 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
 #elif defined(USE_AVX2)
 
 #endif
-        FLAGBITS = 21;
-        BUCKETSTARTI = 233416;
+        sdata->FLAGBITS = 21;
+        sdata->BUCKETSTARTI = 233416;
         break;
     case 524288:
 #ifdef USE_AVX512F
@@ -354,12 +355,12 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
         // for huge offsets when you might be using this blocksize.
         //sieve_line_ptr = &sieve_line_avx2_512k;
 #endif
-        FLAGBITS = 22;
-        BUCKETSTARTI = 443920;
+        sdata->FLAGBITS = 22;
+        sdata->BUCKETSTARTI = 443920;
         break;
     case 1048576:
-        FLAGBITS = 23;
-        BUCKETSTARTI = 846248;
+        sdata->FLAGBITS = 23;
+        sdata->BUCKETSTARTI = 846248;
         break;
     default:
         printf("Bad soe_block\n");
@@ -519,13 +520,13 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
 
 uint64_t init_sieve(soe_staticdata_t *sdata)
 {
-    int i, j, k;
+    int i, k;
     uint64_t numclasses = sdata->numclasses;
     uint64_t prodN = sdata->prodN;
     uint64_t allocated_bytes = 0;
     uint64_t lowlimit = sdata->orig_llimit;
     uint64_t highlimit = sdata->orig_hlimit;
-    uint64_t numflags, numbytes, numlinebytes;
+    uint64_t numbytes, numlinebytes;
 
 
     // some groupings of residue classes and blocks per thread
@@ -536,7 +537,41 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
     // 256 = 16 * 16
     // 272 = 16 * 17
     // 272 = 8 * 34
+
+    // masks for removing or reading single bits in a byte.  nmasks are simply
+    // the negation of these masks, and are filled in within the spSOE function.
+    uint8_t masks[8] = { 0xfe, 0xfd, 0xfb, 0xf7, 0xef, 0xdf, 0xbf, 0x7f };
+    uint8_t nmasks[8] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
+    uint32_t masks32[32] = {
+        0xfffffffe, 0xfffffffd, 0xfffffffb, 0xfffffff7,
+        0xffffffef, 0xffffffdf, 0xffffffbf, 0xffffff7f,
+        0xfffffeff, 0xfffffdff, 0xfffffbff, 0xfffff7ff,
+        0xffffefff, 0xffffdfff, 0xffffbfff, 0xffff7fff,
+        0xfffeffff, 0xfffdffff, 0xfffbffff, 0xfff7ffff,
+        0xffefffff, 0xffdfffff, 0xffbfffff, 0xff7fffff,
+        0xfeffffff, 0xfdffffff, 0xfbffffff, 0xf7ffffff,
+        0xefffffff, 0xdfffffff, 0xbfffffff, 0x7fffffff };
+    uint32_t nmasks32[32] = {
+        0x00000001, 0x00000002, 0x00000004, 0x00000008,
+        0x00000010, 0x00000020, 0x00000040, 0x00000080,
+        0x00000100, 0x00000200, 0x00000400, 0x00000800,
+        0x00001000, 0x00002000, 0x00004000, 0x00008000,
+        0x00010000, 0x00020000, 0x00040000, 0x00080000,
+        0x00100000, 0x00200000, 0x00400000, 0x00800000,
+        0x01000000, 0x02000000, 0x04000000, 0x08000000,
+        0x10000000, 0x20000000, 0x40000000, 0x80000000 };
+
+    for (i = 0; i < 8; i++)
+    {
+        sdata->masks[i] = masks[i];
+        sdata->nmasks[i] = nmasks[i];
+    }
     
+    for (i = 0; i < 32; i++)
+    {
+        sdata->masks32[i] = masks32[i];
+        sdata->nmasks32[i] = nmasks32[i];
+    }
 
     // allocate the residue classes.  
     sdata->rclass = (uint32_t *)malloc(numclasses * sizeof(uint32_t));
@@ -748,8 +783,9 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
 #define DYNAMIC_BOUND 256
 #endif
 
+    int j;
     sdata->presieve_max_id = 40;
-
+    
     for (j = 24; j < sdata->presieve_max_id; j++)
     {
         uint32_t prime = sdata->sieve_p[j];

@@ -35,6 +35,8 @@ SOFTWARE.
 #include <string.h>
 #include <inttypes.h>
 
+void printUsage(options_t* options);
+
 // ========================================================================
 // In this section, define the options, any long form aliases for them,
 // whether they have an argument or not, and help strings to display
@@ -212,7 +214,7 @@ int processOpts(int argc, char** argv, options_t* options)
         }
         else
         {
-            if (numOpt > (options->numArguments))
+            if (numOpt >= (options->numArguments))
             {
                 printf("Too many inputs\n\n");
                 printUsage(options);
@@ -223,6 +225,7 @@ int processOpts(int argc, char** argv, options_t* options)
                 // process argument
                 applyArg(argv[i], numOpt, options);
                 numOpt++;
+                i++;
                 continue;
             }
         }
@@ -231,11 +234,11 @@ int processOpts(int argc, char** argv, options_t* options)
         {
             if (options->numRequired == 1)
             {
-                printf("Missing %d required argument \n\n");
+                printf("Missing %d required argument \n\n", options->numRequired);
             }
             else
             {
-                printf("Missing %d required arguments \n\n");
+                printf("Missing %d required arguments \n\n", options->numRequired);
             }
             printUsage(options);
             exit(0);

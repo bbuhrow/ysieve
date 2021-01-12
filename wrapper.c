@@ -34,6 +34,9 @@ SOFTWARE.
 #include <math.h>
 #include "threadpool.h"
 
+static uint32_t* sieve_p;
+static uint32_t num_sp;
+
 void compute_prps_dispatch(void *vptr)
 {
     tpool_t *tdata = (tpool_t *)vptr;
@@ -85,9 +88,30 @@ void compute_prps_work_fcn(void *vptr)
     return;
 }
 
-uint64_t *GetPRIMESRange(uint32_t *sieve_p, uint32_t num_sp, 
-	mpz_t *offset, uint64_t lowlimit, uint64_t highlimit, uint64_t *num_p,
-    int VFLAG, int THREADS)
+soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
+{
+    soe_staticdata_t* sdata;
+
+    sdata = (soe_staticdata_t*)malloc(sizeof(soe_staticdata_t));
+
+    // bootstrap the sieve
+    sdata->sieve_p = (uint32_t*)xmalloc_align(65536 * sizeof(uint32_t));
+    sdata->num_sp = tiny_soe(65536, sdata->sieve_p);
+
+    sdata->VFLAG = vflag;
+    sdata->THREADS = threads;
+    sdata->SOEBLOCKSIZE = blocksize;
+    return sdata;
+}
+
+void soe_finalize(soe_staticdata_t* sdata)
+{
+    align_free(sieve_p);
+    return;
+}
+
+uint64_t *GetPRIMESRange(soe_staticdata_t* sdata, 
+	mpz_t *offset, uint64_t lowlimit, uint64_t highlimit, uint64_t *num_p)
 {
 	uint64_t i;
 	uint64_t hi_est, lo_est;
@@ -146,42 +170,43 @@ uint64_t *GetPRIMESRange(uint32_t *sieve_p, uint32_t num_sp,
 		uint64_t remainder = (highlimit - lowlimit) % maxrange;
 		uint32_t j;
 				
-		GLOBAL_OFFSET = 0;
+		sdata->GLOBAL_OFFSET = 0;
 		tmpl = lowlimit;
         // maxrange - 1, so that we don't count the upper
         // limit twice (again on the next iteration's lower bound).
 		tmph = lowlimit + maxrange - 1;
 		for (j = 0; j < num_ranges; j++)
 		{
-			tmpcount += spSOE(sieve_p, num_sp, offset, tmpl, &tmph, 0, primes, VFLAG, THREADS);
+			tmpcount += spSOE(sdata, offset, tmpl, &tmph, 0, primes);
 			tmpl += maxrange;
 			tmph = tmpl + maxrange - 1;
-			GLOBAL_OFFSET = tmpcount;
+            sdata->GLOBAL_OFFSET = tmpcount;
 		}
 				
 		tmph = tmpl + remainder;
-		tmpcount += spSOE(sieve_p, num_sp, offset, tmpl, &tmph, 0, primes, VFLAG, THREADS);
+		tmpcount += spSOE(sdata, offset, tmpl, &tmph, 0, primes);
 		*num_p = tmpcount;
 	}
 	else
 	{
 		//find the primes in the interval
-		GLOBAL_OFFSET = 0;
-		*num_p = spSOE(sieve_p, num_sp, offset, lowlimit, &highlimit, 0, primes, VFLAG, THREADS);
+        sdata->GLOBAL_OFFSET = 0;
+		*num_p = spSOE(sdata, offset, lowlimit, &highlimit, 0, primes);
 	}
 
 	return primes;
 }
 
-uint64_t *soe_wrapper(uint64_t lowlimit, uint64_t highlimit, int count, uint64_t *num_p, 
-    int VFLAG, int THREADS, int PRIMES_TO_FILE, int PRIMES_TO_SCREEN)
+uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highlimit, 
+    int count, uint64_t* num_p, int PRIMES_TO_FILE, int PRIMES_TO_SCREEN)
 {
 	//public interface to the sieve.  
 	uint64_t retval, tmpl, tmph, i;
 	uint32_t max_p;	
-	uint32_t *sieve_p;
-    uint32_t num_sp;
+	
 	uint64_t *primes = NULL;
+
+    sdata->only_count = count;
 
     if (highlimit < lowlimit)
     {
@@ -190,11 +215,7 @@ uint64_t *soe_wrapper(uint64_t lowlimit, uint64_t highlimit, int count, uint64_t
         return primes;
     }
 
-    // bootstrap the sieve
-    sieve_p = (uint32_t *)xmalloc_align(65536 * sizeof(uint32_t));
-    num_sp = tiny_soe(65536, sieve_p);
-
-	if (highlimit > (sieve_p[num_sp-1] * sieve_p[num_sp-1]))
+	if (highlimit > (sdata->sieve_p[sdata->num_sp-1] * sdata->sieve_p[sdata->num_sp-1]))
 	{
 		//then we need to generate more sieving primes
 		uint32_t range_est;
@@ -203,33 +224,27 @@ uint64_t *soe_wrapper(uint64_t lowlimit, uint64_t highlimit, int count, uint64_t
 		//primes in the interval	
 		max_p = (uint32_t)sqrt((int64_t)(highlimit)) + 65536;
 		range_est = (uint32_t)estimate_primes_in_range(0, (uint64_t)max_p);
-		sieve_p = (uint32_t *)xrealloc(sieve_p, (size_t) (range_est * sizeof(uint32_t)));
-
-		if (sieve_p == NULL)
-		{
-			printf("unable to allocate %u bytes for %u sieving primes\n",
-				range_est * (uint32_t)sizeof(uint32_t), range_est);
-			exit(1);
-		}
+        sdata->sieve_p = (uint32_t *)xrealloc(sdata->sieve_p, 
+            (size_t) (range_est * sizeof(uint32_t)));
 
 		//find the sieving primes using the seed primes
-		NO_STORE = 0;
-		primes = GetPRIMESRange(sieve_p, num_sp, NULL, 0, max_p, &retval, VFLAG, THREADS);
+        sdata->NO_STORE = 0;
+		primes = GetPRIMESRange(sdata, NULL, 0, max_p, &retval);
+
         for (i = 0; i < retval; i++)
         {
-            sieve_p[i] = (uint32_t)primes[i];
+            sdata->sieve_p[i] = (uint32_t)primes[i];
         }
         
-        if (VFLAG > 1)
+        if (sdata->VFLAG > 1)
         {
             printf("found %u sieving primes\n", (uint32_t)retval);
         }
 
-		num_sp = (uint32_t)retval;
+        sdata->num_sp = (uint32_t)retval;
 		free(primes);
 		primes = NULL;
 	}
-
 
 	if (count)
 	{
@@ -242,14 +257,16 @@ uint64_t *soe_wrapper(uint64_t lowlimit, uint64_t highlimit, int count, uint64_t
 
 			//since this is a small range, we need to 
 			//find a bigger range and count them.
-			primes = GetPRIMESRange(sieve_p, num_sp, NULL, tmpl, tmph, &retval, VFLAG, THREADS);
+			primes = GetPRIMESRange(sdata, NULL, tmpl, tmph, &retval);
 
 			*num_p = 0;
 			//count how many are in the original range of interest
 			for (i = 0; i < retval; i++)
 			{
-				if (primes[i] >= lowlimit && primes[i] <= highlimit)
-					(*num_p)++;
+                if ((primes[i] >= lowlimit) && (primes[i] <= highlimit))
+                {
+                    (*num_p)++;
+                }
 			}
 			free(primes);
 			primes = NULL;
@@ -277,12 +294,12 @@ uint64_t *soe_wrapper(uint64_t lowlimit, uint64_t highlimit, int count, uint64_t
 
 				for (j = 0; j < num_ranges; j++)
 				{
-					*num_p += spSOE(sieve_p, num_sp, NULL, tmpl, &tmph, 1, NULL, VFLAG, THREADS);
+					*num_p += spSOE(sdata, NULL, tmpl, &tmph, count, NULL);
 
 					gettimeofday (&stop, NULL);
                     t_time = yafu_difftime(&start, &stop);
 
-                    if (VFLAG > 1)
+                    if (sdata->VFLAG > 1)
                     {
                         printf("so far, found %" PRIu64 " primes in %1.1f seconds\n", *num_p, t_time);
                     }
@@ -293,15 +310,17 @@ uint64_t *soe_wrapper(uint64_t lowlimit, uint64_t highlimit, int count, uint64_t
 				if (remainder > 0)
 				{
 					tmph = tmpl + remainder;
-					*num_p += spSOE(sieve_p, num_sp, NULL, tmpl, &tmph, 1, NULL, VFLAG, THREADS);
+					*num_p += spSOE(sdata, NULL, tmpl, &tmph, count, NULL);
 				}
-				if (VFLAG > 1)
-					printf("so far, found %" PRIu64 " primes\n",*num_p);
+                if (sdata->VFLAG > 1)
+                {
+                    printf("so far, found %" PRIu64 " primes\n", *num_p);
+                }
 			}
 			else
 			{
 				//we're in a sweet spot already, just get the requested range
-				*num_p = spSOE(sieve_p, num_sp, NULL, lowlimit, &highlimit, 1, NULL, VFLAG, THREADS);
+				*num_p = spSOE(sdata, NULL, lowlimit, &highlimit, count, NULL);
 			}
 		}
 
@@ -320,7 +339,7 @@ uint64_t *soe_wrapper(uint64_t lowlimit, uint64_t highlimit, int count, uint64_t
 
 			//since this is a small range, we need to 
 			//find a bigger range and count them.
-			primes = GetPRIMESRange(sieve_p, num_sp, NULL, tmpl, tmph, &retval, VFLAG, THREADS);
+			primes = GetPRIMESRange(sdata, NULL, tmpl, tmph, &retval);
 			*num_p = 0;
 			for (i = 0; i < retval; i++)
 			{
@@ -334,7 +353,7 @@ uint64_t *soe_wrapper(uint64_t lowlimit, uint64_t highlimit, int count, uint64_t
 			//we don't need to mess with the requested range,
 			//so GetPRIMESRange will return the requested range directly
 			//and the count will be in NUM_P
-			primes = GetPRIMESRange(sieve_p, num_sp, NULL, lowlimit, highlimit, num_p, VFLAG, THREADS);
+			primes = GetPRIMESRange(sdata, NULL, lowlimit, highlimit, num_p);
 		}
 
 		// now dump the requested range of primes to a file, or the
@@ -353,8 +372,10 @@ uint64_t *soe_wrapper(uint64_t lowlimit, uint64_t highlimit, int count, uint64_t
 			{
 				for (i = 0; i < *num_p; i++)
 				{
-					if (primes[i] >= lowlimit && primes[i] <= highlimit)
-						fprintf(out,"%" PRIu64 "\n",primes[i]);
+                    if ((primes[i] >= lowlimit) && (primes[i] <= highlimit))
+                    {
+                        fprintf(out, "%" PRIu64 "\n", primes[i]);
+                    }
 				}
 				fclose(out);
 			}
@@ -364,20 +385,21 @@ uint64_t *soe_wrapper(uint64_t lowlimit, uint64_t highlimit, int count, uint64_t
 		{
 			for (i = 0; i < *num_p; i++)
 			{
-				if (primes[i] >= lowlimit && primes[i] <= highlimit)
-					printf("%" PRIu64 " ",primes[i]);
+                if ((primes[i] >= lowlimit) && (primes[i] <= highlimit))
+                {
+                    printf("%" PRIu64 " ", primes[i]);
+                }
 			}
 			printf("\n");
 		}			
 	}
 
-	align_free(sieve_p);
 	return primes;
 }
 
-uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp, 
+uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 	mpz_t lowlimit, mpz_t highlimit, int count, int num_witnesses, uint64_t *num_p,
-    int VFLAG, int THREADS, int PRIMES_TO_FILE, int PRIMES_TO_SCREEN)
+    int PRIMES_TO_FILE, int PRIMES_TO_SCREEN)
 {
 	//public interface to a routine which will sieve a range of integers
 	//with the supplied primes and either count or compute the values
@@ -414,15 +436,17 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 
 			//since this is a small range, we need to 
 			//find a bigger range and count them.
-			values = GetPRIMESRange(seed_p, num_sp, offset, tmpl, tmph, &retval, VFLAG, THREADS);
+			values = GetPRIMESRange(sdata, offset, tmpl, tmph, &retval);
 
 			*num_p = 0;
 			//count how many are in the original range of interest
 			for (i = 0; i < retval; i++)
 			{
 				mpz_add_ui(tmpz, *offset, values[i]);
-				if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
-					(*num_p)++;
+                if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
+                {
+                    (*num_p)++;
+                }
 			}
 			free(values);
 			values = NULL;
@@ -445,9 +469,11 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 				tmph = tmpl + maxrange - 1;
 				for (j = 0; j < num_ranges; j++)
 				{
-					*num_p += spSOE(seed_p, num_sp, offset, tmpl, &tmph, 1, NULL, VFLAG, THREADS);
-					if (VFLAG > 1)
-						printf("so far, found %" PRIu64 " primes\n",*num_p);
+					*num_p += spSOE(sdata, offset, tmpl, &tmph, 1, NULL);
+                    if (sdata->VFLAG > 1)
+                    {
+                        printf("so far, found %" PRIu64 " primes\n", *num_p);
+                    }
 					tmpl += maxrange;
 					tmph = tmpl + maxrange - 1;
 				}
@@ -455,15 +481,17 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 				if (remainder > 0)
 				{
 					tmph = tmpl + remainder;
-					*num_p += spSOE(seed_p, num_sp, offset, tmpl, &tmph, 1, NULL, VFLAG, THREADS);
+					*num_p += spSOE(sdata, offset, tmpl, &tmph, 1, NULL);
 				}
-				if (VFLAG > 1)
-					printf("so far, found %" PRIu64 " primes\n",*num_p);
+                if (sdata->VFLAG > 1)
+                {
+                    printf("so far, found %" PRIu64 " primes\n", *num_p);
+                }
 			}
 			else
 			{
 				//we're in a sweet spot already, just get the requested range
-				*num_p = spSOE(seed_p, num_sp, offset, 0, &range, 1, NULL, VFLAG, THREADS);
+				*num_p = spSOE(sdata, offset, 0, &range, 1, NULL);
 			}
 		}
 
@@ -480,13 +508,15 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 
 			//since this is a small range, we need to 
 			//find a bigger range and count them.
-			values = GetPRIMESRange(seed_p, num_sp, offset, tmpl, tmph, &retval, VFLAG, THREADS);
+			values = GetPRIMESRange(sdata, offset, tmpl, tmph, &retval);
 			*num_p = 0;
 			for (i = 0; i < retval; i++)
 			{
 				mpz_add_ui(tmpz, *offset, values[i]);
-				if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
-					(*num_p)++;
+                if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
+                {
+                    (*num_p)++;
+                }
 			}
 
 		}
@@ -495,7 +525,7 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 			//we don't need to mess with the requested range,
 			//so GetPRIMESRange will return the requested range directly
 			//and the count will be in NUM_P
-			values = GetPRIMESRange(seed_p, num_sp, offset, 0, range, num_p, VFLAG, THREADS);
+			values = GetPRIMESRange(sdata, offset, 0, range, num_p);
 
 		}
 
@@ -510,21 +540,21 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
             soe_userdata_t udata;
 
 			//allocate thread data structure
-			thread_data = (thread_soedata_t *)malloc(THREADS * sizeof(thread_soedata_t));
+			thread_data = (thread_soedata_t *)malloc(sdata->THREADS * sizeof(thread_soedata_t));
 			
 			// conduct PRP tests on all surviving values
-            if (VFLAG > 0)
+            if (sdata->VFLAG > 0)
             {
                 printf("starting PRP tests with %d witnesses on "
                     "%" PRIu64 " surviving candidates using %d threads\n",
-                    num_witnesses, *num_p, THREADS);
+                    num_witnesses, *num_p, sdata->THREADS);
             }
 
-			range = *num_p / THREADS;
+			range = *num_p / sdata->THREADS;
 			lastid = 0;
 
 			// divvy up the range
-			for (j = 0; j < THREADS; j++)
+			for (j = 0; j < sdata->THREADS; j++)
 			{
 				thread_soedata_t *t = thread_data + j;
 				
@@ -532,7 +562,7 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 				t->stopid = t->startid + range;
 				lastid = t->stopid;
 
-                if (VFLAG > 2)
+                if (sdata->VFLAG > 2)
                 {
                     printf("thread %d computing PRPs from %u to %u\n",
                         (int)j, t->startid, t->stopid);
@@ -540,13 +570,13 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 			}
 
 			// the last one gets any leftover
-            if (thread_data[THREADS - 1].stopid != (uint32_t)*num_p)
+            if (thread_data[sdata->THREADS - 1].stopid != (uint32_t)*num_p)
             {
-                thread_data[THREADS - 1].stopid = (uint32_t)*num_p;
+                thread_data[sdata->THREADS - 1].stopid = (uint32_t)*num_p;
             }
 
 			// allocate space for stuff in the threads
-			for (j = 0; j < THREADS; j++)
+			for (j = 0; j < sdata->THREADS; j++)
 			{
 				thread_soedata_t *t = thread_data + j;
 
@@ -560,8 +590,10 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 				t->current_line = (uint64_t)num_witnesses;
 
 				t->ddata.primes = (uint64_t *)malloc((t->stopid - t->startid) * sizeof(uint64_t));
-				for (i = t->startid; i < t->stopid; i++)
-					t->ddata.primes[i - t->startid] = values[i];
+                for (i = t->startid; i < t->stopid; i++)
+                {
+                    t->ddata.primes[i - t->startid] = values[i];
+                }
 			}
 
 			// now run with the threads.  don't really need the 
@@ -569,7 +601,7 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
             // to test, but it is easy so we use it.
             udata.sdata = &thread_data->sdata;
             udata.ddata = thread_data;
-            tpool_data = tpool_setup(THREADS, NULL, NULL, NULL,
+            tpool_data = tpool_setup(sdata->THREADS, NULL, NULL, NULL,
                 &compute_prps_dispatch, &udata);
 
             thread_data->sdata.sync_count = 0;
@@ -580,25 +612,29 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 
 			// combine results and free stuff
 			retval = 0;
-			for (i=0; i<THREADS; i++)
-			{
-				thread_soedata_t *t = thread_data + i;
+            for (i = 0; i < sdata->THREADS; i++)
+            {
+                thread_soedata_t* t = thread_data + i;
 
-				for (j=0; j < t->linecount; j++)
-					values[retval++] = t->ddata.primes[j];
+                for (j = 0; j < t->linecount; j++)
+                {
+                    values[retval++] = t->ddata.primes[j];
+                }
 
-				free(t->ddata.primes);
-				mpz_clear(t->tmpz);
-				mpz_clear(t->offset);
-				mpz_clear(t->lowlimit);
-				mpz_clear(t->highlimit);
-			}
+                free(t->ddata.primes);
+                mpz_clear(t->tmpz);
+                mpz_clear(t->offset);
+                mpz_clear(t->lowlimit);
+                mpz_clear(t->highlimit);
+            }
 
 			free(thread_data);
 
 			*num_p = retval;
-			if (VFLAG > 0)
-				printf("found %" PRIu64 " PRPs\n", *num_p);
+            if (sdata->VFLAG > 0)
+            {
+                printf("found %" PRIu64 " PRPs\n", *num_p);
+            }
 			
 		}
 
@@ -610,8 +646,10 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 			mpz_sub(tmpz, lowlimit, *offset);
 			a = mpz_get_ui(tmpz);
 
-			for (i=0; i < *num_p; i++)
-				values[i] -= a;
+            for (i = 0; i < *num_p; i++)
+            {
+                values[i] -= a;
+            }
 		}
 
 		// now dump the requested range of primes to a file, or the
@@ -636,8 +674,10 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 				{
 					//mpz_add_ui(tmpz, *offset, values[i]);
 					mpz_add_ui(tmpz, lowlimit, values[i]);
-					if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
-						gmp_fprintf(out,"%Zd\n",tmpz);
+                    if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
+                    {
+                        gmp_fprintf(out, "%Zd\n", tmpz);
+                    }
 				}
 				fclose(out);
 			}
@@ -649,8 +689,10 @@ uint64_t *sieve_to_depth(uint32_t *seed_p, uint32_t num_sp,
 			{
 				//mpz_add_ui(tmpz, *offset, values[i]);
 				mpz_add_ui(tmpz, lowlimit, values[i]);
-				if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
-					gmp_printf("%Zd\n",tmpz);
+                if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
+                {
+                    gmp_printf("%Zd\n", tmpz);
+                }
 			}
 			printf("\n");
 		}			

@@ -110,7 +110,7 @@ char** tokenize(char* in, int* token_types, int* num_tokens);
 int get_el_type2(char s);
 int is_new_token(int el_type, int el_type2);
 int invalid_dest(char* dest);
-void calc_with_assignment(str_t* in, meta_t* metadata);
+void calc_with_assignment(str_t* in, meta_t* metadata, int force_quiet);
 
 #ifndef _MSC_VER
 #define strtok_s strtok_r
@@ -1423,14 +1423,21 @@ void get_expression(char* in, str_t* out)
     free(tmp2);
 }
 
-int process_expression(char* input_exp, meta_t* metadata)
+int process_expression(char* input_exp, meta_t* metadata, 
+    int force_quiet, int no_convert_result)
 {
+    // process the expression in input_exp, which can be multi-line.
+    // force_quiet will suppress all output.
+    // no_convert_result will skip any conversion of the result back
+    // to a string (e.g., for scripts that don't need to display 
+    // intermediate results).
     str_t str;
     str_t* out;
-    char* ptr;
     int num;
     int i;
+    mpz_t tmp;
 
+    mpz_init(tmp);
     sInit(&str);
     toStr(input_exp, &str);
 
@@ -1450,16 +1457,27 @@ int process_expression(char* input_exp, meta_t* metadata)
 
     for (i = 0; i < num; i++)
     {
-        calc_with_assignment(&out[i], metadata);
+        calc_with_assignment(&out[i], metadata, force_quiet);
         sFree(&out[i]);
     }
 
+    // return the last result
+    if (!no_convert_result)
+    {
+        char* tmpstr;
+        get_uvar("ans", tmp);
+        tmpstr = mpz_get_str(NULL, OBASE, tmp);
+        strcpy(input_exp, tmpstr);                  // danger: don't know how big this is...
+        free(tmpstr);
+    }
+
+    mpz_clear(tmp);
     sFree(&str);
     free(out);
     return 0;
 }
 
-void calc_with_assignment(str_t* in, meta_t* metadata)
+void calc_with_assignment(str_t* in, meta_t* metadata, int force_quiet)
 {
     char* ptr;
     char varname[80];
@@ -1509,7 +1527,7 @@ void calc_with_assignment(str_t* in, meta_t* metadata)
                 new_uvar(varname, tmp);
             }
 
-            if (nooutput == 0)
+            if ((nooutput == 0) && (force_quiet == 0))
             {
                 if (OBASE == DEC)
                 {
@@ -1586,7 +1604,6 @@ int calc(str_t *in, meta_t *metadata)
 	str_t *post;		//post fix expression
 	char **tokens;		//pointer to an array of strings holding tokens
 	char *tok;
-	char *strN;			/* use this to make a copy of the post-fix string */
 	char delim[2];
 	int *token_types;	//type of each token
 	int num_tokens;		//number of tokens in the array.
@@ -1995,14 +2012,10 @@ int feval(int funcnum, int nargs, meta_t *metadata)
 	// in the mpz_t array 'operands'.
 	// place return values in operands[0]
 	mpz_t mp1, mp2, mp3, tmp1, tmp2;
-	mpz_t gmpz;
 
 	str_t str;
 	uint32_t i=0;
-	uint64_t n64;
-	uint32_t j,k;
-	double t;
-	uint64_t lower, upper, inc, count;
+	uint32_t j;
 
 	mpz_init(mp1);
 	mpz_init(mp2);

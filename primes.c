@@ -23,11 +23,15 @@ SOFTWARE.
 */
 
 #include "soe.h"
+#include "util.h"
 #include "threadpool.h"
 #include <immintrin.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <string.h>
+#include <math.h>
+
 
 //for testing one of 8 bits in a byte in one of 8 lines.
 //bit num picks the row, lines num picks the col.	
@@ -294,14 +298,12 @@ uint64_t primes_from_lineflags(soe_staticdata_t *sdata, thread_soedata_t *thread
 uint32_t compute_8_bytes(soe_staticdata_t *sdata, 
 	uint32_t pcount, uint64_t *primes, uint64_t byte_offset)
 {
-	int b;	
 	uint32_t current_line;
 	// re-ordering queues supporting up to 48 residue classes.
     uint64_t pqueues[64][48];
     uint8_t pcounts[64];
     int i, j;
 	uint32_t nc = sdata->numclasses;
-	uint32_t *rclass = sdata->rclass;
 	uint64_t lowlimit = sdata->lowlimit;
 	uint64_t prodN = sdata->prodN;
 	uint8_t **lines = sdata->lines;
@@ -366,20 +368,20 @@ uint32_t compute_8_bytes(soe_staticdata_t *sdata,
 
 #if defined(USE_BMI2) || defined(USE_AVX512F)
 
-__inline uint64_t_t interleave_avx2_bmi2_pdep2x32(uint32_t_t x1, uint32_t_t x2)
+__inline uint64_t interleave_avx2_bmi2_pdep2x32(uint32_t x1, uint32_t x2)
 {
     return _pdep_u64(x1, 0x5555555555555555) 
         | _pdep_u64(x2, 0xaaaaaaaaaaaaaaaa);
 }
 
-__inline uint64_t_t interleave_avx2_bmi2_pdep(uint8_t_t x1,
-    uint8_t_t x2,
-    uint8_t_t x3,
-    uint8_t_t x4,
-    uint8_t_t x5,
-    uint8_t_t x6,
-    uint8_t_t x7,
-    uint8_t_t x8)
+__inline uint64_t interleave_avx2_bmi2_pdep(uint8_t x1,
+    uint8_t x2,
+    uint8_t x3,
+    uint8_t x4,
+    uint8_t x5,
+    uint8_t x6,
+    uint8_t x7,
+    uint8_t x8)
 {
     return _pdep_u64(x1, 0x0101010101010101ull) |
         _pdep_u64(x2, 0x0202020202020202ull) |
@@ -404,7 +406,7 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
 
     if ((byte_offset & 32767) == 0)
     {
-        if (VFLAG > 1)
+        if (sdata->VFLAG > 1)
         {
             printf("computing: %d%%\r", (int)
                 ((double)byte_offset / (double)(sdata->numlinebytes) * 100.0));
@@ -422,8 +424,8 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
     {
         int i,j;
         uint64_t plow, phigh;
-        uint32_t_t *lines32a = (uint32_t_t *)lines[0];
-        uint32_t_t *lines32b = (uint32_t_t *)lines[1];
+        uint32_t *lines32a = (uint32_t *)lines[0];
+        uint32_t *lines32b = (uint32_t *)lines[1];
 
         // compute the minimum/maximum prime we could encounter in this range
         // and execute either a branch-free innermost loop or not.
@@ -447,8 +449,8 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
 
                 while (aligned_flags > 0)
                 {
-                    uint64_t_t pos = _trail_zcnt64(aligned_flags);
-                    uint64_t_t prime = lowlimit + (pos / 2) * 6 + sdata->rclass[pos % 2];
+                    uint64_t pos = _trail_zcnt64(aligned_flags);
+                    uint64_t prime = lowlimit + (pos / 2) * 6 + sdata->rclass[pos % 2];
 
                     if ((prime >= olow) && (prime <= ohigh))
                         primes[GLOBAL_OFFSET + pcount++] = prime;
@@ -473,8 +475,8 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
                 // then compute primes in order for flags that are set.
                 while (aligned_flags > 0)
                 {
-                    uint64_t_t pos = _trail_zcnt64(aligned_flags);
-                    uint64_t_t prime = lowlimit + (pos / 2) * 6 + sdata->rclass[pos % 2];
+                    uint64_t pos = _trail_zcnt64(aligned_flags);
+                    uint64_t prime = lowlimit + (pos / 2) * 6 + sdata->rclass[pos % 2];
 
                     primes[GLOBAL_OFFSET + pcount++] = prime;
                     aligned_flags = _reset_lsb64(aligned_flags);
@@ -515,8 +517,8 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
 
                 while (aligned_flags > 0)
                 {
-                    uint64_t_t pos = _trail_zcnt64(aligned_flags);
-                    uint64_t_t prime = lowlimit + (pos / 8) * 30 + sdata->rclass[pos % 8];
+                    uint64_t pos = _trail_zcnt64(aligned_flags);
+                    uint64_t prime = lowlimit + (pos / 8) * 30 + sdata->rclass[pos % 8];
 
                     if ((prime >= olow) && (prime <= ohigh))
                         primes[GLOBAL_OFFSET + pcount++] = prime;
@@ -546,8 +548,8 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
                 // then compute primes in order for flags that are set.
                 while (aligned_flags > 0)
                 {
-                    uint64_t_t pos = _trail_zcnt64(aligned_flags);
-                    uint64_t_t prime = lowlimit + (pos / 8) * 30 + sdata->rclass[pos % 8];
+                    uint64_t pos = _trail_zcnt64(aligned_flags);
+                    uint64_t prime = lowlimit + (pos / 8) * 30 + sdata->rclass[pos % 8];
 
                     primes[GLOBAL_OFFSET + pcount++] = prime;
                     aligned_flags = _reset_lsb64(aligned_flags);
@@ -582,8 +584,8 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
 
             while (flags64 > 0)
             {
-                uint64_t_t pos = _trail_zcnt64(flags64);
-                uint64_t_t prime = lowlimit + pos * 210 + sdata->rclass[current_line];
+                uint64_t pos = _trail_zcnt64(flags64);
+                uint64_t prime = lowlimit + pos * 210 + sdata->rclass[current_line];
 
                 if ((prime >= olow) && (prime <= ohigh))
                 {

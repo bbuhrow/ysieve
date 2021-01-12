@@ -24,6 +24,7 @@ SOFTWARE.
 
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include "soe.h"
 #include "util.h"
 #include "threadpool.h"
@@ -248,7 +249,7 @@ void compute_roots_work_fcn(void *vptr)
     {
 
 #if defined(USE_AVX2) || defined(_WIN64)
-        int j = 0;
+        //int j = 0;
 
         if (t->sdata.use_monty)
         {            
@@ -469,10 +470,10 @@ void getRoots(soe_staticdata_t *sdata, thread_soedata_t *thread_data)
     uint64_t startprime;
     uint64_t lblk_b, ublk_b, blk_b_sqrt;
     uint64_t i;
-    int j, k;
+    int j;
     uint32_t range, lastid;
 
-    //timing
+    // timing
     double t;
     struct timeval tstart, tstop;
 

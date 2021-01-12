@@ -34,6 +34,7 @@ SOFTWARE.
 #include "calc.h"
 #include "cmdOptions.h"
 #include "soe.h"
+#include "util.h"
 
 // gcc -O2  calc.h calc.c demo.c -o demo  -lgmp -lm
 
@@ -44,18 +45,23 @@ int main(int argc, char** argv)
     uint64_t start;
     uint64_t stop;
     uint64_t *primes;
-    uint32_t* sieve_p;
-    uint32_t num_sp;
     int count;
-    uint64_t* num_found;
+    uint64_t num_found;
     int haveFile;
+    // timing
+    double t;
+    struct timeval tstart, tstop;
+    int SOEBLOCKSIZE = 32768;       // this should be an option in the interface
+    soe_staticdata_t* sdata;
+
 
     options = initOpt();
     processOpts(argc, argv, options);
 
+
     calc_init();
-    process_expression(options->startExpression, NULL);
-    process_expression(options->stopExpression, NULL);
+    process_expression(options->startExpression, NULL, 1, 0);
+    process_expression(options->stopExpression, NULL, 1, 0);
     calc_finalize();
 
     sscanf(options->startExpression, "%" PRIu64 "", &start);
@@ -79,8 +85,21 @@ int main(int argc, char** argv)
         count = 1;
     }
 
-    primes = soe_wrapper(start, stop, count, &num_found,
-        options->verbosity, options->threads, haveFile, options->outScreen);
+    printf("starting sieve on bounds %" PRIu64 " : %" PRIu64 "\n", start, stop);
+
+    sdata = soe_init(options->verbosity, options->threads, SOEBLOCKSIZE);
+
+    gettimeofday(&tstart, NULL);
+    primes = soe_wrapper(sdata, start, stop, count, &num_found,
+        haveFile, options->outScreen);
+    printf("Num primes found: %" PRIu64 "\n", num_found);
+    gettimeofday(&tstop, NULL);
+    t = yafu_difftime(&tstart, &tstop);
+    printf("Elapsed time    : %1.6f seconds\n", t);
+
+    soe_finalize(sdata);
+    free(sdata);
+    align_free(primes);
 
     return 0;
 }

@@ -25,6 +25,9 @@ SOFTWARE.
 #include "threadpool.h"
 #include <stdint.h>
 #include <stdio.h>
+#ifndef WIN32
+#include <unistd.h>
+#endif
 
 #if defined(WIN32) || defined(_WIN64)
 DWORD WINAPI tpool_worker_main(LPVOID thread_data);

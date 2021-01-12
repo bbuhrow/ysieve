@@ -29,7 +29,6 @@ SOFTWARE.
 #include <malloc.h>
 #include "util.h"
 
-
 #if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
 #else
@@ -72,11 +71,13 @@ const char* szFeatures[] =
     "Pending Break Enable"
 };
 
+#if defined (_MSC_VER)
 struct timezone
 {
     int  tz_minuteswest; /* minutes W of Greenwich */
     int  tz_dsttime;     /* type of dst correction */
 };
+#endif
 
 void* xmalloc_align(size_t len)
 {
