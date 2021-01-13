@@ -93,7 +93,7 @@ soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
     sdata = (soe_staticdata_t*)malloc(sizeof(soe_staticdata_t));
 
     // bootstrap the sieve
-    sdata->sieve_p = (uint32_t*)xmalloc_align(65536 * sizeof(uint32_t));
+    sdata->sieve_p = (uint32_t*)xmalloc(65536 * sizeof(uint32_t));
     sdata->num_sp = tiny_soe(65536, sdata->sieve_p);
 
     sdata->VFLAG = vflag;
@@ -104,7 +104,7 @@ soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
 
 void soe_finalize(soe_staticdata_t* sdata)
 {
-    align_free(sdata->sieve_p);
+    free(sdata->sieve_p);
     return;
 }
 
@@ -146,17 +146,7 @@ uint64_t *GetPRIMESRange(soe_staticdata_t* sdata,
 			lo_est = 0;
 
 		i = (uint64_t)((double)(hi_est - lo_est) * 1.25);
-
-		if (1) //(!NO_STORE)
-		{
-			primes = (uint64_t *)realloc(primes,(size_t) (i * sizeof(uint64_t)));
-			if (primes == NULL)
-			{
-				printf("unable to allocate %" PRIu64 " bytes for range %" PRIu64 " to %" PRIu64 "\n",
-					(uint64_t)(i * sizeof(uint64_t)),lowlimit,highlimit);
-				exit(1);
-			}
-		}
+		primes = (uint64_t *)xrealloc(primes, (size_t) (i * sizeof(uint64_t)));
 	}
 
 	//check for really big ranges ('big' is different here than when we are counting
@@ -189,6 +179,11 @@ uint64_t *GetPRIMESRange(soe_staticdata_t* sdata,
 	{
 		//find the primes in the interval
         sdata->GLOBAL_OFFSET = 0;
+        if (sdata->VFLAG > 1)
+        {
+            printf("generating primes in range %" PRIu64 " : %" PRIu64 "\n", 
+                lowlimit, highlimit);
+        }
 		*num_p = spSOE(sdata, offset, lowlimit, &highlimit, 0, primes);
 	}
 
@@ -217,11 +212,18 @@ uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highl
 	{
 		//then we need to generate more sieving primes
 		uint32_t range_est;
-	
+
 		//allocate array based on conservative estimate of the number of 
 		//primes in the interval	
 		max_p = (uint32_t)sqrt((int64_t)(highlimit)) + 65536;
 		range_est = (uint32_t)estimate_primes_in_range(0, (uint64_t)max_p);
+
+        if (sdata->VFLAG > 1)
+        {
+            printf("generating more sieving primes in range 0 : %u \n", max_p);
+            printf("allocating %u bytes \n", range_est);
+        }
+
         sdata->sieve_p = (uint32_t *)xrealloc(sdata->sieve_p, 
             (size_t) (range_est * sizeof(uint32_t)));
 
@@ -229,14 +231,14 @@ uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highl
         sdata->NO_STORE = 0;
 		primes = GetPRIMESRange(sdata, NULL, 0, max_p, &retval);
 
-        for (i = 0; i < retval; i++)
-        {
-            sdata->sieve_p[i] = (uint32_t)primes[i];
-        }
-        
         if (sdata->VFLAG > 1)
         {
             printf("found %u sieving primes\n", (uint32_t)retval);
+        }
+
+        for (i = 0; i < retval; i++)
+        {
+            sdata->sieve_p[i] = (uint32_t)primes[i];
         }
 
         sdata->num_sp = (uint32_t)retval;
