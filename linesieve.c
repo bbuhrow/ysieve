@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include "soe.h"
+#include "soe_impl.h"
 #include "util.h"
 #include <immintrin.h>
 #include <math.h>
@@ -57,6 +58,12 @@ void sieve_line(thread_soedata_t *thread_data)
 	soe_staticdata_t *sdata = &thread_data->sdata;	
 	uint32_t current_line = thread_data->current_line;
 	uint8_t *line = thread_data->sdata.lines[current_line];
+    int FLAGSIZE = sdata->FLAGSIZE;
+    int FLAGSIZEm1 = sdata->FLAGSIZEm1;
+    int FLAGBITS = sdata->FLAGBITS;
+    int SOEBLOCKSIZE = sdata->SOEBLOCKSIZE;
+    uint8_t* masks = sdata->masks;
+    uint8_t* nmasks = sdata->nmasks;
 	
 	// stuff for bucket sieving
     uint64_t *bptr;
@@ -417,6 +424,8 @@ void sieve_line_avx512_32k(thread_soedata_t *thread_data)
 	soe_staticdata_t *sdata = &thread_data->sdata;
 	uint32_t current_line = thread_data->current_line;
 	uint8_t *line = thread_data->sdata.lines[current_line];
+    uint8_t* masks = sdata->masks;
+    uint8_t* nmasks = sdata->nmasks;
 
 	// stuff for bucket sieving
 	uint64_t *bptr;
@@ -811,6 +820,8 @@ void sieve_line_avx512_128k(thread_soedata_t *thread_data)
 	soe_staticdata_t *sdata = &thread_data->sdata;
 	uint32_t current_line = thread_data->current_line;
 	uint8_t *line = thread_data->sdata.lines[current_line];
+    uint8_t* masks = sdata->masks;
+    uint8_t* nmasks = sdata->nmasks;
 
 	// stuff for bucket sieving
 	uint64_t *bptr;
@@ -1205,6 +1216,8 @@ void sieve_line_avx512_256k(thread_soedata_t *thread_data)
 	soe_staticdata_t *sdata = &thread_data->sdata;
 	uint32_t current_line = thread_data->current_line;
 	uint8_t *line = thread_data->sdata.lines[current_line];
+    uint8_t* masks = sdata->masks;
+    uint8_t* nmasks = sdata->nmasks;
 
 	// stuff for bucket sieving
 	uint64_t *bptr;
@@ -1599,6 +1612,8 @@ void sieve_line_avx512_512k(thread_soedata_t *thread_data)
 	soe_staticdata_t *sdata = &thread_data->sdata;
 	uint32_t current_line = thread_data->current_line;
 	uint8_t *line = thread_data->sdata.lines[current_line];
+    uint8_t* masks = sdata->masks;
+    uint8_t* nmasks = sdata->nmasks;
 
 	// stuff for bucket sieving
 	uint64_t *bptr;
@@ -1996,6 +2011,11 @@ void sieve_line_avx2_32k(thread_soedata_t *thread_data)
 	soe_staticdata_t *sdata = &thread_data->sdata;
 	uint32_t current_line = thread_data->current_line;
 	uint8_t *line = thread_data->sdata.lines[current_line];
+    uint8_t* masks = sdata->masks;
+    uint8_t* nmasks = sdata->nmasks;
+#ifdef BITMASKS32
+    uint32_t* masks32 = sdata->masks32;
+#endif
 
 	// stuff for bucket sieving
 	uint64_t *bptr;
@@ -2510,6 +2530,8 @@ void sieve_line_avx2_128k(thread_soedata_t *thread_data)
 	soe_staticdata_t *sdata = &thread_data->sdata;
 	uint32_t current_line = thread_data->current_line;
 	uint8_t *line = thread_data->sdata.lines[current_line];
+    uint8_t* masks = sdata->masks;
+    uint8_t* nmasks = sdata->nmasks;
 
 	// stuff for bucket sieving
 	uint64_t *bptr;
@@ -2917,6 +2939,8 @@ void sieve_line_avx2_512k(thread_soedata_t* thread_data)
     soe_staticdata_t* sdata = &thread_data->sdata;
     uint32_t current_line = thread_data->current_line;
     uint8_t* line = thread_data->sdata.lines[current_line];
+    uint8_t* masks = sdata->masks;
+    uint8_t* nmasks = sdata->nmasks;
 
     // stuff for bucket sieving
     uint64_t* bptr;

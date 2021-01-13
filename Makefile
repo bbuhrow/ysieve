@@ -114,6 +114,7 @@ OBJS = $(SRCS:.c=$(OBJ_EXT))
 #---------------------------Header file lists -------------------------
 HEAD = calc.h  \
 	soe.h  \
+    soe_impl.h \
 	util.h  \
 	threadpool.h \
     cmdOptions.h
@@ -121,8 +122,11 @@ HEAD = calc.h  \
 
 #---------------------------Make Targets -------------------------
 
-all: $(OBJS) 
-	$(CC) $(CFLAGS) $(OBJS) -o $(BINNAME) $(LIBS)
+all: $(OBJS)
+	rm -f libysieve.a
+	ar r libysieve.a $(OBJS)
+	ranlib libysieve.a
+	$(CC) $(CFLAGS) $(OBJS) -o $(BINNAME) libysieve.a $(LIBS)
 
 
 clean:

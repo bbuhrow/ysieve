@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include "soe.h"
+#include "soe_impl.h"
 #include "gmp.h"
 #include "util.h"
 #include <stdint.h>
@@ -33,9 +34,6 @@ SOFTWARE.
 #include <string.h>
 #include <math.h>
 #include "threadpool.h"
-
-static uint32_t* sieve_p;
-static uint32_t num_sp;
 
 void compute_prps_dispatch(void *vptr)
 {
@@ -106,7 +104,7 @@ soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
 
 void soe_finalize(soe_staticdata_t* sdata)
 {
-    align_free(sieve_p);
+    align_free(sdata->sieve_p);
     return;
 }
 

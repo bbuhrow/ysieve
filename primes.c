@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include "soe.h"
+#include "soe_impl.h"
 #include "util.h"
 #include "threadpool.h"
 #include <immintrin.h>
@@ -119,6 +120,7 @@ uint64_t primes_from_lineflags(soe_staticdata_t *sdata, thread_soedata_t *thread
 	uint64_t i;
 	int j;
 	uint32_t range, lastid;
+    int GLOBAL_OFFSET = sdata->GLOBAL_OFFSET;
 
     //timing
     double t;
@@ -309,6 +311,7 @@ uint32_t compute_8_bytes(soe_staticdata_t *sdata,
 	uint8_t **lines = sdata->lines;
 	uint64_t olow = sdata->orig_llimit;
 	uint64_t ohigh = sdata->orig_hlimit;
+    int GLOBAL_OFFSET = sdata->GLOBAL_OFFSET;
 		
 	if ((byte_offset & 32767) == 0)
 	{
@@ -397,12 +400,11 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
     uint32_t pcount, uint64_t *primes, uint64_t byte_offset)
 {    
     uint32_t nc = sdata->numclasses;
-    uint32_t *rclass = sdata->rclass;
     uint64_t lowlimit = sdata->lowlimit;
-    uint64_t prodN = sdata->prodN;
     uint8_t **lines = sdata->lines;
     uint64_t olow = sdata->orig_llimit;
     uint64_t ohigh = sdata->orig_hlimit;
+    int GLOBAL_OFFSET = sdata->GLOBAL_OFFSET;
 
     if ((byte_offset & 32767) == 0)
     {
@@ -422,7 +424,7 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
     // here is the 2 line version
     if (nc == 2)
     {
-        int i,j;
+        int i;
         uint64_t plow, phigh;
         uint32_t *lines32a = (uint32_t *)lines[0];
         uint32_t *lines32b = (uint32_t *)lines[1];
@@ -487,7 +489,7 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
     }
     else if (nc == 8)
     {
-        int i,j;
+        int i;
         uint64_t plow, phigh;
 
         // compute the minimum/maximum prime we could encounter in this range

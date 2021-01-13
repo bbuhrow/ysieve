@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include "soe.h"
+#include "soe_impl.h"
 #include "util.h"
 #include <stdint.h>
 #include <immintrin.h>
@@ -34,7 +35,6 @@ uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
 	uint64_t numlinebytes = sdata->numlinebytes;
 	uint64_t lowlimit = sdata->lowlimit;
 	uint64_t prodN = sdata->prodN;
-	uint64_t *flagblock64 = (uint64_t *)line;
 	uint8_t *flagblock = line;
 	uint64_t i, k, it = 0;
     uint32_t lastbyte;
@@ -43,6 +43,8 @@ uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
 	int ix;
 	int done, kx;
 	uint64_t prime;
+    uint8_t* masks = sdata->masks;
+    uint8_t* nmasks = sdata->nmasks;
 
     //printf("orig lolimit: %lu\n", sdata->orig_llimit);
     //printf("orig hilimit: %lu\n", sdata->orig_hlimit);
@@ -156,6 +158,7 @@ uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
 
 #else
 
+    uint64_t* flagblock64 = (uint64_t*)line;
     stopcount = i / 8;
     for (i = 0; i < stopcount; i++)
 	{
@@ -241,6 +244,8 @@ void count_line_special(thread_soedata_t *thread_data)
 	uint64_t i, k, it, lower, upper;
 	int ix;
 	int64_t start, stop;
+    uint8_t* masks = sdata->masks;
+    uint8_t* nmasks = sdata->nmasks;
 
 	//zero out any bits below the requested range
 	for (i=lowlimit + sdata->rclass[current_line], ix=0; i < sdata->orig_llimit; i += prodN, ix++)

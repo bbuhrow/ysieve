@@ -5,6 +5,8 @@ VisualStudioVersion = 16.0.29306.81
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ysieve", "ysieve.vcxproj", "{B78F0340-3937-4725-B1B6-3FA826FB5EEA}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ysieve_lib", "..\ysieve_lib\ysieve_lib.vcxproj", "{DFDB652A-E779-4B08-A77A-6420E40F78EF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,14 @@ Global
 		{B78F0340-3937-4725-B1B6-3FA826FB5EEA}.Release|x64.Build.0 = Release|x64
 		{B78F0340-3937-4725-B1B6-3FA826FB5EEA}.Release|x86.ActiveCfg = Release|Win32
 		{B78F0340-3937-4725-B1B6-3FA826FB5EEA}.Release|x86.Build.0 = Release|Win32
+		{DFDB652A-E779-4B08-A77A-6420E40F78EF}.Debug|x64.ActiveCfg = Debug|x64
+		{DFDB652A-E779-4B08-A77A-6420E40F78EF}.Debug|x64.Build.0 = Debug|x64
+		{DFDB652A-E779-4B08-A77A-6420E40F78EF}.Debug|x86.ActiveCfg = Debug|Win32
+		{DFDB652A-E779-4B08-A77A-6420E40F78EF}.Debug|x86.Build.0 = Debug|Win32
+		{DFDB652A-E779-4B08-A77A-6420E40F78EF}.Release|x64.ActiveCfg = Release|x64
+		{DFDB652A-E779-4B08-A77A-6420E40F78EF}.Release|x64.Build.0 = Release|x64
+		{DFDB652A-E779-4B08-A77A-6420E40F78EF}.Release|x86.ActiveCfg = Release|Win32
+		{DFDB652A-E779-4B08-A77A-6420E40F78EF}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

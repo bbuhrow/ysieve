@@ -25,6 +25,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <inttypes.h>
 #include "soe.h"
+#include "soe_impl.h"
 #include "util.h"
 #include "threadpool.h"
 #include <string.h>
@@ -297,7 +298,7 @@ void bitmap_8class_work_fcn(void *vptr)
             // bclassnum to select the correct line.  The classnum is easy
             // to track, but the division in the bit location calculation 
             // could be a problem.
-            uint32_t brloc = t->startid * sdata->LAGSIZE + (bloc - bclass) / 30;
+            uint32_t brloc = t->startid * sdata->FLAGSIZE + (bloc - bclass) / 30;
             sdata->lines[res_table[bclass]][brloc >> 3] &= sdata->masks[brloc & 7];
 
             // increment the bit offset to the next valid residue class

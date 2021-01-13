@@ -31,6 +31,58 @@ SOFTWARE.
 #define NO_64U_REM
 //#define U64_REM_ONLY
 
+#ifdef USE_AVX2
+// macros for Montgomery arithmetic - helpful for computing 
+// division-less offsets once we have enough reuse (number of
+// classes) to justify the setup costs.
+#define _mm256_cmpge_epu32(a, b) \
+        _mm256_cmpeq_epi32(_mm256_max_epu32(a, b), a)
+
+#define _mm256_cmple_epu32(a, b) _mm256_cmpge_epu32(b, a)
+
+
+static __inline __m256i CLEAR_HIGH_VEC(__m256i x)
+{
+    __m256i chi = _mm256_set1_epi64x(0x00000000ffffffff);
+    return _mm256_and_si256(chi, x);
+}
+
+static __inline __m256i vec_redc(__m256i x64e, __m256i x64o, __m256i pinv, __m256i p)
+{
+    // uint32_t m = (uint32_t)x * pinv;
+    __m256i t1 = _mm256_shuffle_epi32(pinv, 0xB1);      // odd-index pinv in lo words
+    __m256i even = _mm256_mul_epu32(x64e, pinv);
+    __m256i odd = _mm256_mul_epu32(x64o, t1);
+    __m256i t2;
+
+    // x += (uint64_t)m * (uint64_t)p;
+    t1 = _mm256_shuffle_epi32(p, 0xB1);      // odd-index p in lo words
+    even = _mm256_add_epi64(x64e, _mm256_mul_epu32(even, p));
+    odd = _mm256_add_epi64(x64o, _mm256_mul_epu32(odd, t1));
+
+    // m = x >> 32;
+    t1 = _mm256_blend_epi32(odd, _mm256_shuffle_epi32(even, 0xB1), 0x55);
+
+    // if (m >= p) m -= p;
+    t2 = _mm256_cmpge_epu32(t1, p); //_mm256_or_si256(_mm256_cmpgt_epi32(t1, p), _mm256_cmpeq_epi32(t1, p));
+    t2 = _mm256_and_si256(p, t2);
+
+    return _mm256_sub_epi32(t1, t2);
+}
+
+static __inline __m256i vec_to_monty(__m256i x, __m256i r2, __m256i pinv, __m256i p)
+{
+    //uint64_t t = (uint64_t)x * (uint64_t)r2;
+    __m256i t1 = _mm256_shuffle_epi32(x, 0xB1);
+    __m256i t2 = _mm256_shuffle_epi32(r2, 0xB1);
+    __m256i even = _mm256_mul_epu32(x, r2);
+    __m256i odd = _mm256_mul_epu32(t1, t2);
+
+    return vec_redc(even, odd, pinv, p);
+}
+
+#endif
+
 void get_offsets(thread_soedata_t *thread_data)
 {
     //extract stuff from the thread data structure
@@ -42,6 +94,8 @@ void get_offsets(thread_soedata_t *thread_data)
     uint32_t diff = sdata->rclass[thread_data->current_line] - 1;
     uint64_t tmp2;
     int s;
+    int FLAGSIZE = sdata->FLAGSIZE;
+    int FLAGBITS = sdata->FLAGBITS;
 
     // failsafe: set all blocks to sieve with all primes.  the loop below will overwrite
     // these with better limits according to the size of flags in the blocks.
@@ -366,43 +420,11 @@ void get_offsets(thread_soedata_t *thread_data)
             // we solved for lower_mod_prime while computing the modular inverse of
             // each prime, for the residue class 1.  add the difference between this
             // residue class and 1 before multiplying by the modular inverse to find the offset.
-
-            // Maybe it can still be a win in some cases to use Monty-arith even without AVX2?
-            // Until we can benchmark that, just skip it unless AVX2 is enabled.
-#ifdef NOT_USE_MONTY
-
-            {
-                uint32_t m, d, t;
-
-                // inputs to monty     
-                t = to_monty_loc(lmp[i] + diff, sdata->r2modp[i], sdata->pinv[i], prime);
-                //s = to_monty_loc(s, sdata->r2modp[i], sdata->pinv[i], prime);
-                tmp2 = (uint64_t)s * (uint64_t)t;
-
-                // reduce
-                root = redc_loc(tmp2, sdata->pinv[i], prime);
-
-                // take out of monty rep
-                root = redc_loc(root, sdata->pinv[i], prime);
-
-                t = to_monty_loc(lmp[i+1] + diff, sdata->r2modp[i+1], sdata->pinv[i+1], p2);
-                //s2 = to_monty_loc(s2, sdata->r2modp[i+1], sdata->pinv[i+1], p2);
-                tmp3 = (uint64_t)s2 * (uint64_t)t;
-
-                // reduce
-                r2 = redc_loc(tmp3, sdata->pinv[i+1], p2);
-
-                // take out of monty rep
-                r2 = redc_loc(r2, sdata->pinv[i+1], p2);
-            }
-
-#else
             tmp2 = (uint64_t)s * (uint64_t)(lmp[i] + diff);
             tmp3 = (uint64_t)s2 * (uint64_t)(lmp[i + 1] + diff);
 
             root = (uint32_t)(tmp2 % (uint64_t)prime);
             r2 = (uint32_t)(tmp3 % (uint64_t)p2);
-#endif
 
             // It is faster to update during
             // linesieve than doing it all here in a loop.

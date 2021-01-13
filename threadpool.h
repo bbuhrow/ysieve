@@ -36,11 +36,7 @@ extern "C" {
 #include <stdlib.h>
 #include <malloc.h>
 
-#ifdef _MSC_VER
-#include <WinBase.h>
-#endif
-
-#if defined(WIN32)
+#if defined(_WIN32)
 
 #include <windows.h>
 #include <process.h>

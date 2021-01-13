@@ -29,6 +29,7 @@ SOFTWARE.
 #include <stdlib.h>
 #include <inttypes.h>
 #include <math.h>
+#include "soe_impl.h"
 
 #ifdef USE_AVX512F
 ALIGNED_MEM uint64_t presieve_largemasks[16][173][8];
@@ -630,23 +631,23 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
     // we want the smallest number of blocks such that all integers in the requested
     // range are represented.  Each block contains 32768 * 8 bit-flags, each of
     // which represents integers spaced 'prodN' apart.
-    sdata->blocks = (highlimit - lowlimit) / prodN / FLAGSIZE;
-    if (((highlimit - lowlimit) / prodN) % FLAGSIZE != 0) sdata->blocks++;
-    sdata->numlinebytes = sdata->blocks * SOEBLOCKSIZE;
+    sdata->blocks = (highlimit - lowlimit) / prodN / sdata->FLAGSIZE;
+    if (((highlimit - lowlimit) / prodN) % sdata->FLAGSIZE != 0) sdata->blocks++;
+    sdata->numlinebytes = sdata->blocks * sdata->SOEBLOCKSIZE;
     numlinebytes = sdata->numlinebytes;
     highlimit = (uint64_t)((uint64_t)sdata->numlinebytes * (uint64_t)prodN * (uint64_t)BITSINBYTE + lowlimit);
     sdata->highlimit = highlimit;
 
     // each flag in a block is spaced prodN integers apart.  record the resulting size of the 
     // number line encoded in each block.
-    sdata->blk_r = FLAGSIZE*prodN;
+    sdata->blk_r = sdata->FLAGSIZE*prodN;
 
     // compute the breakpoints at which we switch to other sieving methods	
     sdata->num_bitmap_primes = 0;
     sdata->bitmap_start_id = sdata->pboundi;
-    if (sdata->pboundi > BUCKETSTARTI)
+    if (sdata->pboundi > sdata->BUCKETSTARTI)
     {
-        sdata->bucket_start_id = BUCKETSTARTI;
+        sdata->bucket_start_id = sdata->BUCKETSTARTI;
 
         // also see if a bitmap sieving step will be beneficial.
         sdata->bitmap_lower_bound = 99999999999999ULL;
@@ -673,7 +674,7 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
     }
 
     // any prime larger than this will only hit the interval once (in residue space)
-    sdata->large_bucket_start_prime = sdata->blocks * FLAGSIZE;
+    sdata->large_bucket_start_prime = sdata->blocks * sdata->FLAGSIZE;
 
     // allocate space for the root of each sieve prime (used by the bucket sieve)
     sdata->root = (int *)xmalloc_align(sdata->bitmap_start_id * sizeof(int));
@@ -986,7 +987,7 @@ uint64_t alloc_threaddata(soe_staticdata_t *sdata, thread_soedata_t *thread_data
 		// we'll need to store the offset into the next block for each prime.
 		// actually only need those primes less than BUCKETSTARTP since bucket sieving
 		// doesn't use the offset array.
-		j = MIN(sdata->pboundi, BUCKETSTARTI);
+		j = MIN(sdata->pboundi, sdata->BUCKETSTARTI);
         thread->ddata.offsets = (uint32_t *)xmalloc_align(j * sizeof(uint32_t));
 		allocated_bytes += j * sizeof(uint32_t);
 		if (thread->ddata.offsets == NULL)

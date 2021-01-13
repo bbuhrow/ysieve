@@ -47,13 +47,13 @@ char usageHelp[MAXHELPLEN] = "[start (default 0)] stop [options]";
 
 // command line options, specified by '-'
 char OptionArray[NUMOPTIONS][MAXOPTIONLEN] = { 
-    "t", "s", "f", "v"};
+    "t", "s", "f", "v", "b"};
 
 // command line option aliases, specified by '--'
 // need the same number of strings here, even if
 // some of them are blank (i.e., have no long form alias).
 char LongOptionAliases[NUMOPTIONS][MAXOPTIONLEN] = {
-    "threads", "screen", "file", ""};
+    "threads", "screen", "file", "", "blksz"};
 
 // indication of whether or not an option needs a corresponding argument.
 // needs to be the same length as the above two arrays.
@@ -61,7 +61,7 @@ char LongOptionAliases[NUMOPTIONS][MAXOPTIONLEN] = {
 // 1 = argument required
 // 2 = argument optional
 int needsArg[NUMOPTIONS] = {
-    1,0,2,0};
+    1,0,2,0,1};
 
 // help strings displayed with -h
 // needs to be the same length as the above arrays, even if 
@@ -70,7 +70,8 @@ char OptionHelp[NUMOPTIONS][MAXHELPLEN] = {
     "Number of threads",
     "Output to screen",
     "Output to file",
-    "Verbosity - this option should not have an argument"};
+    "Verbosity - this option should not have an argument",
+    "Blocksize in bits"};
 // ========================================================================
 
 // ========================================================================
@@ -122,6 +123,10 @@ void applyOpt(char* opt, char* arg, options_t* options)
     {
         options->verbosity++;
     }
+    else if (strcmp(opt, options->OptionArray[4]) == 0)
+    {
+        options->blocksize = atoi(arg);
+    }
     else
     {
         int i;
@@ -147,6 +152,12 @@ options_t* initOpt(void)
 {
     options_t* options = (options_t*)malloc(sizeof(options_t));
     int i;
+
+    if (options == NULL)
+    {
+        printf("could not allocate options structure\n");
+        exit(1);
+    }
 
     for (i = 0; i < NUMOPTIONS; i++)
     {
@@ -175,6 +186,7 @@ options_t* initOpt(void)
     strcpy(options->outFile, "");
     options->threads = 1;
     options->outScreen = 0;
+    options->blocksize = 32768;
     // ========================================================================
 
     return options;

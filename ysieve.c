@@ -26,6 +26,13 @@ SOFTWARE.
 
 */
 
+#if defined(WIN32)
+
+#include <windows.h>
+#include <process.h>
+
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -51,9 +58,7 @@ int main(int argc, char** argv)
     // timing
     double t;
     struct timeval tstart, tstop;
-    int SOEBLOCKSIZE = 32768;       // this should be an option in the interface
     soe_staticdata_t* sdata;
-
 
     options = initOpt();
     processOpts(argc, argv, options);
@@ -66,6 +71,7 @@ int main(int argc, char** argv)
 
     sscanf(options->startExpression, "%" PRIu64 "", &start);
     sscanf(options->stopExpression, "%" PRIu64 "", &stop);
+    printf("starting sieve on bounds %" PRIu64 " : %" PRIu64 "\n", start, stop);
 
     if (strlen(options->outFile) > 0)
     {
@@ -85,13 +91,13 @@ int main(int argc, char** argv)
         count = 1;
     }
 
-    printf("starting sieve on bounds %" PRIu64 " : %" PRIu64 "\n", start, stop);
-
-    sdata = soe_init(options->verbosity, options->threads, SOEBLOCKSIZE);
+    sdata = soe_init(options->verbosity, options->threads, options->blocksize);
 
     gettimeofday(&tstart, NULL);
+    
     primes = soe_wrapper(sdata, start, stop, count, &num_found,
         haveFile, options->outScreen);
+    
     printf("Num primes found: %" PRIu64 "\n", num_found);
     gettimeofday(&tstop, NULL);
     t = yafu_difftime(&tstart, &tstop);
@@ -99,7 +105,10 @@ int main(int argc, char** argv)
 
     soe_finalize(sdata);
     free(sdata);
-    align_free(primes);
+    if (primes != NULL)
+    {
+        align_free(primes);
+    }
 
     return 0;
 }

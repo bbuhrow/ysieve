@@ -26,6 +26,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdio.h>
 #include "soe.h"
+#include "soe_impl.h"
 #include "threadpool.h"
 #include "gmp.h"
 #include "util.h"

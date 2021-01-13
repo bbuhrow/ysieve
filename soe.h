@@ -22,262 +22,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#ifndef YAFU_SOE_H
-#define YAFU_SOE_H
+#ifndef SOE_H
+#define SOE_H
 
+#include <stdlib.h>
 #include <stdint.h>
+
+#if defined(_WIN32)
+
+#include <windows.h>
+#include <process.h>
+
+#endif
+
 #include "threadpool.h"
-#include "immintrin.h"
 #include "gmp.h"
 #include "util.h"
 
 #define USE_SOE_THREADPOOL
-#define BITSINBYTE 8
-#define MAXSIEVEPRIMECOUNT 100000000	//# primes less than ~2e9: limit of 2e9^2 = 4e18
+
 
 enum soe_command {
-	SOE_COMMAND_INIT,
-	SOE_COMMAND_WAIT,
-	SOE_COMMAND_SIEVE_AND_COUNT,
-	SOE_COMMAND_SIEVE_AND_COMPUTE,
-	SOE_COMPUTE_ROOTS,
-	SOE_COMPUTE_PRIMES,
-	SOE_COMPUTE_PRPS,
-	SOE_COMMAND_END
+    SOE_COMMAND_INIT,
+    SOE_COMMAND_WAIT,
+    SOE_COMMAND_SIEVE_AND_COUNT,
+    SOE_COMMAND_SIEVE_AND_COMPUTE,
+    SOE_COMPUTE_ROOTS,
+    SOE_COMPUTE_PRIMES,
+    SOE_COMPUTE_PRPS,
+    SOE_COMMAND_END
 };
-
-#ifdef __INTEL_COMPILER
-// leading and trailing zero count are ABM instructions
-// that require haswell or later on Intel or ABM on AMD.
-// The same basic functionality exists with the 
-// bsf and bsr instructions that are standard x86, if
-// those requirements are not met.
-#if defined( USE_BMI2 ) || defined (TARGET_KNL) || defined( USE_AVX512F )
-#define _reset_lsb(x) _blsr_u32(x)
-#define _reset_lsb64(x) _blsr_u64(x)
-#define _lead_zcnt64 __lzcnt64
-#define _trail_zcnt _tzcnt_u32
-#define _trail_zcnt64 _tzcnt_u64
-#else
-#define _reset_lsb(x) ((x) &= ((x) - 1))
-#define _reset_lsb64(x) ((x) &= ((x) - 1))
-__inline uint32_t _trail_zcnt(uint32_t x)
-{
-    uint32_t pos;
-    if (_BitScanForward(&pos, x))
-        return pos;
-    else
-        return 32;
-}
-__inline uint64_t _trail_zcnt64(uint64_t x)
-{
-    uint64_t pos;
-    if (_BitScanForward64(&pos, x))
-        return pos;
-    else
-        return 64;
-}
-__inline uint64_t _lead_zcnt64(uint64_t x)
-{
-    uint64_t pos;
-    if (_BitScanReverse64(&pos, x))
-        return pos;
-    else
-        return 64;
-}
-#endif
-#elif defined(__GNUC__)
-#if defined( USE_BMI2 ) || defined (TARGET_KNL) || defined( USE_AVX512F )
-#define _reset_lsb(x) _blsr_u32(x)
-#define _reset_lsb64(x) _blsr_u64(x)
-#define _lead_zcnt64 __builtin_clzll
-#define _trail_zcnt __builtin_ctzl
-#define _trail_zcnt64 __builtin_ctzll
-#else
-#define _reset_lsb(x) ((x) &= ((x) - 1))
-#define _reset_lsb64(x) ((x) &= ((x) - 1))
-#define _lead_zcnt64 __builtin_clzll
-#define _trail_zcnt __builtin_ctzl
-#define _trail_zcnt64 __builtin_ctzll
-
-#endif
-#elif defined(_MSC_VER)
-#include <intrin.h>
-#ifdef USE_BMI2
-#define _lead_zcnt64 __lzcnt64
-#define _trail_zcnt _tzcnt_u32
-#define _trail_zcnt64 _tzcnt_u64
-#define _reset_lsb(x) ((x) &= ((x) - 1))
-#define _reset_lsb64(x) ((x) &= ((x) - 1))
-#else
-__inline uint32_t _trail_zcnt(uint32_t x)
-{
-    uint32_t pos;
-    if (_BitScanForward(&pos, x))
-        return pos;
-    else
-        return 32;
-}
-__inline uint64_t _trail_zcnt64(uint64_t x)
-{
-    uint64_t pos;
-    if (_BitScanForward64(&pos, x))
-        return pos;
-    else
-        return 64;
-}
-__inline uint64_t _lead_zcnt64(uint64_t x)
-{
-    uint64_t pos;
-    if (_BitScanReverse64(&pos, x))
-        return pos;
-    else
-        return 64;
-}
-#define _reset_lsb(x) ((x) &= ((x) - 1))
-#define _reset_lsb64(x) ((x) &= ((x) - 1))
-#endif
-
-#else
-
-__inline uint64_t _lead_zcnt64(uint64_t x)
-{
-    uint64_t pos;
-    if (x)
-    {
-        pos = 0;
-        for (pos = 0; ; pos++)
-        {
-            if (x & (1ULL << (63 - pos)))
-                break;
-        }
-    }
-    else
-    {
-#ifdef CHAR_BIT
-        pos = CHAR_BIT * sizeof(x);
-#else
-        pos = 8 * sizeof(x);
-#endif
-    }
-    return pos;
-}
-
-__inline uint32_t _trail_zcnt(uint32_t x)
-{
-    uint32_t pos;
-    if (x)
-    {
-        x = (x ^ (x - 1)) >> 1;  // Set x's trailing 0s to 1s and zero rest
-        for (pos = 0; x; pos++)
-        {
-            x >>= 1;
-        }
-    }
-    else
-    {
-#ifdef CHAR_BIT
-        pos = CHAR_BIT * sizeof(x);
-#else
-        pos = 8 * sizeof(x);
-#endif
-    }
-    return pos;
-}
-
-__inline uint64_t _trail_zcnt64(uint64_t x)
-{
-    uint64_t pos;
-    if (x)
-    {
-        x = (x ^ (x - 1)) >> 1;  // Set x's trailing 0s to 1s and zero rest
-        for (pos = 0; x; pos++)
-        {
-            x >>= 1;
-        }
-    }
-    else
-    {
-#ifdef CHAR_BIT
-        pos = CHAR_BIT * sizeof(x);
-#else
-        pos = 8 * sizeof(x);
-#endif
-    }
-    return pos;
-}
-#define _reset_lsb(x) ((x) &= ((x) - 1))
-#define _reset_lsb64(x) ((x) &= ((x) - 1))
-
-#endif
-
-#ifdef USE_AVX2
-
-#ifdef USE_AVX512F
-extern ALIGNED_MEM uint64_t presieve_largemasks[16][173][8];
-extern ALIGNED_MEM uint32_t presieve_steps[32];
-extern ALIGNED_MEM uint32_t presieve_primes[32];
-extern ALIGNED_MEM uint32_t presieve_p1[32];
-
-#else
-// for storage of presieving lists from prime index 24 to 40 (97 to 173 inclusive)
-extern ALIGNED_MEM uint64_t presieve_largemasks[16][173][4];
-extern ALIGNED_MEM uint32_t presieve_steps[32];
-extern ALIGNED_MEM uint32_t presieve_primes[32];
-extern ALIGNED_MEM uint32_t presieve_p1[32];
-#endif
-
-// macros for Montgomery arithmetic - helpful for computing 
-// division-less offsets once we have enough reuse (number of
-// classes) to justify the setup costs.
-#define _mm256_cmpge_epu32(a, b) \
-        _mm256_cmpeq_epi32(_mm256_max_epu32(a, b), a)
-
-#define _mm256_cmple_epu32(a, b) _mm256_cmpge_epu32(b, a)
-
-
-static __inline __m256i CLEAR_HIGH_VEC(__m256i x)
-{
-    __m256i chi = _mm256_set1_epi64x(0x00000000ffffffff);
-    return _mm256_and_si256(chi, x);
-}
-
-static __inline __m256i vec_redc(__m256i x64e, __m256i x64o, __m256i pinv, __m256i p)
-{
-    // uint32_t m = (uint32_t)x * pinv;
-    __m256i t1 = _mm256_shuffle_epi32(pinv, 0xB1);      // odd-index pinv in lo words
-    __m256i even = _mm256_mul_epu32(x64e, pinv);
-    __m256i odd = _mm256_mul_epu32(x64o, t1);
-    __m256i t2;
-
-    // x += (uint64_t)m * (uint64_t)p;
-    t1 = _mm256_shuffle_epi32(p, 0xB1);      // odd-index p in lo words
-    even = _mm256_add_epi64(x64e, _mm256_mul_epu32(even, p));
-    odd = _mm256_add_epi64(x64o, _mm256_mul_epu32(odd, t1));
-
-    // m = x >> 32;
-    t1 = _mm256_blend_epi32(odd, _mm256_shuffle_epi32(even, 0xB1), 0x55);
-
-    // if (m >= p) m -= p;
-    t2 = _mm256_cmpge_epu32(t1, p); //_mm256_or_si256(_mm256_cmpgt_epi32(t1, p), _mm256_cmpeq_epi32(t1, p));
-    t2 = _mm256_and_si256(p, t2);
-
-    return _mm256_sub_epi32(t1, t2);
-}
-
-static __inline __m256i vec_to_monty(__m256i x, __m256i r2, __m256i pinv, __m256i p)
-{
-    //uint64_t t = (uint64_t)x * (uint64_t)r2;
-    __m256i t1 = _mm256_shuffle_epi32(x, 0xB1);
-    __m256i t2 = _mm256_shuffle_epi32(r2, 0xB1);
-    __m256i even = _mm256_mul_epu32(x, r2);
-    __m256i odd = _mm256_mul_epu32(t1, t2);
-
-    //return redc_loc(t, pinv, p);
-    return vec_redc(even, odd, pinv, p);
-}
-
-#endif
 
 typedef struct
 {
@@ -459,21 +233,6 @@ typedef struct
     thread_soedata_t *ddata;
 } soe_userdata_t;
 
-static __inline uint32_t redc_loc(uint64_t x, uint32_t pinv, uint32_t p)
-{
-    uint32_t m = (uint32_t)x * pinv;
-    x += (uint64_t)m * (uint64_t)p;
-    m = x >> 32;
-    if (m >= p) m -= p;
-    return m;
-}
-
-static __inline uint32_t to_monty_loc(uint32_t x, uint32_t r2, uint32_t pinv, uint32_t p)
-{
-    uint64_t t = (uint64_t)x * (uint64_t)r2;
-    return redc_loc(t, pinv, p);
-}
-
 
 // interface functions
 extern soe_staticdata_t* soe_init(int vflag, int threads, int blocksize);
@@ -484,75 +243,5 @@ extern uint64_t* sieve_to_depth(soe_staticdata_t* sdata,
     mpz_t lowlimit, mpz_t highlimit, int count, int num_witnesses, uint64_t* num_p,
     int PRIMES_TO_FILE, int PRIMES_TO_SCREEN);
 
-// thread ready sieving functions
-void sieve_line(thread_soedata_t *thread_data);
-void sieve_line_avx2_32k(thread_soedata_t *thread_data);
-void sieve_line_avx2_64k(thread_soedata_t *thread_data);
-void sieve_line_avx2_128k(thread_soedata_t *thread_data);
-void sieve_line_avx2_256k(thread_soedata_t *thread_data);
-void sieve_line_avx2_512k(thread_soedata_t* thread_data);
-void sieve_line_avx512_32k(thread_soedata_t *thread_data);
-void sieve_line_avx512_64k(thread_soedata_t *thread_data);
-void sieve_line_avx512_128k(thread_soedata_t *thread_data);
-void sieve_line_avx512_256k(thread_soedata_t *thread_data);
-void sieve_line_avx512_512k(thread_soedata_t *thread_data);
-void(*sieve_line_ptr)(thread_soedata_t *);
 
-
-uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line);
-void count_line_special(thread_soedata_t *thread_data);
-uint32_t compute_32_bytes(soe_staticdata_t *sdata,
-    uint32_t pcount, uint64_t *primes, uint64_t byte_offset);
-uint64_t primes_from_lineflags(soe_staticdata_t *sdata, thread_soedata_t *thread_data,
-	uint32_t start_count, uint64_t *primes);
-void get_offsets(thread_soedata_t *thread_data);
-void getRoots(soe_staticdata_t *sdata, thread_soedata_t *thread_data);
-void stop_soe_worker_thread(thread_soedata_t *t);
-void start_soe_worker_thread(thread_soedata_t *t);
-#if defined(WIN32) || defined(_WIN64)
-DWORD WINAPI soe_worker_thread_main(LPVOID thread_data);
-#else
-void *soe_worker_thread_main(void *thread_data);
-#endif
-
-// routines for finding small numbers of primes; seed primes for main SOE
-uint32_t tiny_soe(uint32_t limit, uint32_t *primes);
-
-// top level sieving routines
-uint64_t* GetPRIMESRange(soe_staticdata_t* sdata, 
-    mpz_t* offset, uint64_t lowlimit, uint64_t highlimit, uint64_t* num_p);
-uint64_t spSOE(soe_staticdata_t* sdata, mpz_t* offset,
-    uint64_t lowlimit, uint64_t* highlimit, int count, uint64_t* primes);
-
-// misc and helper functions
-uint64_t estimate_primes_in_range(uint64_t lowlimit, uint64_t highlimit);
-void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sdata);
-int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t *sieve_p,
-	soe_staticdata_t *sdata, mpz_t offset);
-uint64_t init_sieve(soe_staticdata_t *sdata);
-void set_bucket_depth(soe_staticdata_t *sdata);
-uint64_t alloc_threaddata(soe_staticdata_t *sdata, thread_soedata_t *thread_data);
-void do_soe_sieving(soe_staticdata_t *sdata, thread_soedata_t *thread_data, int count);
-void finalize_sieve(soe_staticdata_t *sdata,
-	thread_soedata_t *thread_data, int count, uint64_t *primes);
-
-uint32_t modinv_1(uint32_t a, uint32_t p);
-uint32_t modinv_1b(uint32_t a, uint32_t p);
-uint32_t modinv_1c(uint32_t a, uint32_t p);
-uint64_t spGCD(uint64_t x, uint64_t y);
-
-void pre_sieve(soe_dynamicdata_t *ddata, soe_staticdata_t *sdata, uint8_t *flagblock);
-void pre_sieve_avx2(soe_dynamicdata_t *ddata, soe_staticdata_t *sdata, uint8_t *flagblock);
-void pre_sieve_avx512(soe_dynamicdata_t *ddata, soe_staticdata_t *sdata, uint8_t *flagblock);
-void (*pre_sieve_ptr)(soe_dynamicdata_t *, soe_staticdata_t *, uint8_t *);
-
-uint32_t compute_8_bytes(soe_staticdata_t *sdata,
-    uint32_t pcount, uint64_t *primes, uint64_t byte_offset);
-uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
-    uint32_t pcount, uint64_t *primes, uint64_t byte_offset);
-uint32_t (*compute_8_bytes_ptr)(soe_staticdata_t *, uint32_t, uint64_t *, uint64_t);
-
-
-
-
-#endif // YAFU_SOE_H
+#endif // #ifndef SOE_H

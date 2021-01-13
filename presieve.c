@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include "soe.h"
+#include "soe_impl.h"
 #include "util.h"
 #include <immintrin.h> //<immintrin.h>
 
@@ -2195,6 +2196,7 @@ void pre_sieve_avx512(soe_dynamicdata_t *ddata, soe_staticdata_t *sdata, uint8_t
     int mask_step, mask_step2;
     int mask_num, mask_num2;
     uint64_t *flagblock64;
+    int FLAGSIZE = sdata->FLAGSIZE;
 
     // flagblock is always a multiple of 8 bytes
     flagblock64 = (uint64_t *)flagblock;
@@ -2498,6 +2500,7 @@ void pre_sieve_avx2(soe_dynamicdata_t *ddata, soe_staticdata_t *sdata, uint8_t *
     int mask_step, mask_step2;
     int mask_num, mask_num2;
     uint64_t *flagblock64;
+    int FLAGSIZE = sdata->FLAGSIZE;
 
     // flagblock is always a multiple of 8 bytes
     flagblock64 = (uint64_t *)flagblock;
@@ -2799,6 +2802,7 @@ void pre_sieve(soe_dynamicdata_t *ddata, soe_staticdata_t *sdata, uint8_t *flagb
     int mask_step, mask_step2;
     int mask_num, mask_num2;
     uint64_t *flagblock64;
+    int FLAGSIZE = sdata->FLAGSIZE;
 
     // flagblock is always a multiple of 8 bytes
     flagblock64 = (uint64_t *)flagblock;

@@ -28,8 +28,26 @@ SOFTWARE.
 #include "soe.h"
 #include "util.h"
 #include "threadpool.h"
+#include "soe_impl.h"
 
 #define USE_NEW_ROOTCALC
+
+
+static __inline uint32_t redc_loc(uint64_t x, uint32_t pinv, uint32_t p)
+{
+    uint32_t m = (uint32_t)x * pinv;
+    x += (uint64_t)m * (uint64_t)p;
+    m = x >> 32;
+    if (m >= p) m -= p;
+    return m;
+}
+
+static __inline uint32_t to_monty_loc(uint32_t x, uint32_t r2, uint32_t pinv, uint32_t p)
+{
+    uint64_t t = (uint64_t)x * (uint64_t)r2;
+    return redc_loc(t, pinv, p);
+}
+
 
 void compute_roots_dispatch(void *vptr)
 {
