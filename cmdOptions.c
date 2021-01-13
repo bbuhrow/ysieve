@@ -47,13 +47,13 @@ char usageHelp[MAXHELPLEN] = "[start (default 0)] stop [options]";
 
 // command line options, specified by '-'
 char OptionArray[NUMOPTIONS][MAXOPTIONLEN] = { 
-    "t", "s", "f", "v", "b"};
+    "t", "s", "f", "v", "b", "p"};
 
 // command line option aliases, specified by '--'
 // need the same number of strings here, even if
 // some of them are blank (i.e., have no long form alias).
 char LongOptionAliases[NUMOPTIONS][MAXOPTIONLEN] = {
-    "threads", "screen", "file", "", "blksz"};
+    "threads", "screen", "file", "", "blksz", "sievep"};
 
 // indication of whether or not an option needs a corresponding argument.
 // needs to be the same length as the above two arrays.
@@ -61,7 +61,7 @@ char LongOptionAliases[NUMOPTIONS][MAXOPTIONLEN] = {
 // 1 = argument required
 // 2 = argument optional
 int needsArg[NUMOPTIONS] = {
-    1,0,2,0,1};
+    1,0,2,0,1,1};
 
 // help strings displayed with -h
 // needs to be the same length as the above arrays, even if 
@@ -71,7 +71,8 @@ char OptionHelp[NUMOPTIONS][MAXHELPLEN] = {
     "Output to screen",
     "Output to file",
     "Verbosity - this option should not have an argument",
-    "Blocksize in bits"};
+    "Blocksize in kB",
+    "Upper end of primes to sieve with (default = 0: sieve with all necessary primes)"};
 // ========================================================================
 
 // ========================================================================
@@ -126,6 +127,10 @@ void applyOpt(char* opt, char* arg, options_t* options)
     else if (strcmp(opt, options->OptionArray[4]) == 0)
     {
         options->blocksize = atoi(arg);
+    }
+    else if (strcmp(opt, options->OptionArray[5]) == 0)
+    {
+        options->sieve_primes_limit = strtoul(arg, NULL, 10);
     }
     else
     {
@@ -186,7 +191,8 @@ options_t* initOpt(void)
     strcpy(options->outFile, "");
     options->threads = 1;
     options->outScreen = 0;
-    options->blocksize = 32768;
+    options->blocksize = 32;
+    options->sieve_primes_limit = 0;
     // ========================================================================
 
     return options;
@@ -333,6 +339,20 @@ int processOpts(int argc, char** argv, options_t* options)
             k++;
         }
         i++;
+    }
+
+    if (numOpt < options->numRequired)
+    {
+        if (options->numRequired == 1)
+        {
+            printf("Missing %d required argument \n\n", options->numRequired);
+        }
+        else
+        {
+            printf("Missing %d required arguments \n\n", options->numRequired);
+        }
+        printUsage(options);
+        exit(0);
     }
 
     return k;

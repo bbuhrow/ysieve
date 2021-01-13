@@ -98,7 +98,7 @@ soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
 
     sdata->VFLAG = vflag;
     sdata->THREADS = threads;
-    sdata->SOEBLOCKSIZE = blocksize;
+    sdata->SOEBLOCKSIZE = blocksize << 10;
     return sdata;
 }
 
@@ -401,11 +401,11 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 	mpz_t lowlimit, mpz_t highlimit, int count, int num_witnesses, uint64_t *num_p,
     int PRIMES_TO_FILE, int PRIMES_TO_SCREEN)
 {
-	//public interface to a routine which will sieve a range of integers
-	//with the supplied primes and either count or compute the values
-	//that survive.  Basically, it is just the sieve, but with no
-	//guareentees that what survives the sieving is prime.  The idea is to 
-	//remove cheap composites.
+	// public interface to a routine which will sieve a range of integers
+	// with the supplied primes and either count or compute the values
+	// that survive.  Basically, it is just the sieve, but with no
+	// guareentees that what survives the sieving is prime.  The idea is to 
+	// remove cheap composites.
 	uint64_t retval, i, range, tmpl, tmph;
 	uint64_t *values = NULL;
 	mpz_t tmpz;
@@ -498,7 +498,7 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 	}
 	else
 	{
-		//this needs to be a range of at least 1e6
+		// this needs to be a range of at least 1e6
 		if (range < 1000000)
 		{
 			//there is slack built into the sieve limit, so go ahead and increase
@@ -506,8 +506,8 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 			tmpl = 0;
 			tmph = tmpl + 1000000;
 
-			//since this is a small range, we need to 
-			//find a bigger range and count them.
+			// since this is a small range, we need to 
+			// find a bigger range and count them.
 			values = GetPRIMESRange(sdata, offset, tmpl, tmph, &retval);
 			*num_p = 0;
 			for (i = 0; i < retval; i++)
@@ -518,7 +518,6 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
                     (*num_p)++;
                 }
 			}
-
 		}
 		else
 		{
@@ -526,7 +525,6 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 			//so GetPRIMESRange will return the requested range directly
 			//and the count will be in NUM_P
 			values = GetPRIMESRange(sdata, offset, 0, range, num_p);
-
 		}
 
 		if (num_witnesses > 0)

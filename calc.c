@@ -1423,7 +1423,7 @@ void get_expression(char* in, str_t* out)
     free(tmp2);
 }
 
-int process_expression(char* input_exp, meta_t* metadata, 
+char* process_expression(char* input_exp, meta_t* metadata,
     int force_quiet, int no_convert_result)
 {
     // process the expression in input_exp, which can be multi-line.
@@ -1436,6 +1436,7 @@ int process_expression(char* input_exp, meta_t* metadata,
     int num;
     int i;
     mpz_t tmp;
+    char* outstr = NULL;
 
     mpz_init(tmp);
     sInit(&str);
@@ -1464,17 +1465,14 @@ int process_expression(char* input_exp, meta_t* metadata,
     // return the last result
     if (!no_convert_result)
     {
-        char* tmpstr;
         get_uvar("ans", tmp);
-        tmpstr = mpz_get_str(NULL, OBASE, tmp);
-        strcpy(input_exp, tmpstr);                  // danger: don't know how big this is...
-        free(tmpstr);
+        outstr = mpz_get_str(NULL, OBASE, tmp);
     }
 
     mpz_clear(tmp);
     sFree(&str);
     free(out);
-    return 0;
+    return outstr;
 }
 
 void calc_with_assignment(str_t* in, meta_t* metadata, int force_quiet)
