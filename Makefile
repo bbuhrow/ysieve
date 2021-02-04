@@ -104,10 +104,10 @@ SRCS = \
 	soe_util.c \
 	wrapper.c \
 	threadpool.c \
-    cmdOptions.c \
+    demo/cmdOptions.c \
     calc.c \
-    utils.c \
-    ysieve.c
+    ysieve_utils.c \
+    demo/ysieve.c
 
 OBJS = $(SRCS:.c=$(OBJ_EXT))
 
@@ -115,9 +115,9 @@ OBJS = $(SRCS:.c=$(OBJ_EXT))
 HEAD = calc.h  \
 	soe.h  \
     soe_impl.h \
-	util.h  \
+	ysieve_util.h  \
 	threadpool.h \
-    cmdOptions.h
+    demo/cmdOptions.h
 
 
 #---------------------------Make Targets -------------------------

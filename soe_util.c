@@ -99,7 +99,7 @@ uint32_t bitmap_bound_tab[4][5] = {
 	/*480*/ { 999999999, 999999999, 999999999, 999999999, 999999999 } };
 #endif
 
-uint32_t modinv_1(uint32_t a, uint32_t p) {
+uint32_t modinv1(uint32_t a, uint32_t p) {
 
     /* thanks to the folks at www.mersenneforum.org */
 
@@ -161,7 +161,7 @@ uint32_t modinv_1(uint32_t a, uint32_t p) {
         return p - ps1;
 }
 
-uint32_t modinv_1b(uint32_t a, uint32_t p) {
+uint32_t modinv2(uint32_t a, uint32_t p) {
 
     /* thanks to the folks at www.mersenneforum.org */
 
@@ -225,7 +225,7 @@ uint32_t modinv_1b(uint32_t a, uint32_t p) {
         return 0xFFFFFFFF - ps1 + 1;
 }
 
-uint32_t modinv_1c(uint32_t a, uint32_t p) {
+uint32_t modinv3(uint32_t a, uint32_t p) {
 
     /* thanks to the folks at www.mersenneforum.org */
     // for use when it is known that p >> a, in which case
@@ -287,7 +287,7 @@ uint32_t modinv_1c(uint32_t a, uint32_t p) {
         return p - ps1;
 }
 
-uint64_t spGCD(uint64_t x, uint64_t y)
+uint64_t gcd_1(uint64_t x, uint64_t y)
 {
     uint64_t a, b, c;
     a = x; b = y;
@@ -582,7 +582,7 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
     k = 0;
     for (i = 1; i < prodN; i++)
     {
-        if (spGCD(i, (uint64_t)prodN) == 1)
+        if (gcd_1(i, (uint64_t)prodN) == 1)
         {
             sdata->rclass[k] = (uint32_t)i;
             k++;

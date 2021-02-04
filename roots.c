@@ -290,7 +290,7 @@ void compute_roots_work_fcn(void *vptr)
                 if (last_root[classnum] == 0)
                 {
                     // start the process with the first prime in this class
-                    inv = modinv_1c(pn, prime);
+                    inv = modinv3(pn, prime);
                     t->sdata.root[i] = prime - inv;
                     last_root[classnum] = inv;
                     last_p[classnum] = prime;
@@ -367,7 +367,7 @@ void compute_roots_work_fcn(void *vptr)
                 if (last_root[classnum] == 0)
                 {
                     // start the process with the first prime in this class
-                    inv = modinv_1c(pn, prime);
+                    inv = modinv3(pn, prime);
                     t->sdata.root[i] = prime - inv;
                     last_root[classnum] = inv;
                     last_p[classnum] = prime;
@@ -384,7 +384,7 @@ void compute_roots_work_fcn(void *vptr)
 
 #else
                 // slightly optimized modinv when prime >> prodN
-                inv = modinv_1c(t->sdata.prodN, prime);
+                inv = modinv3(t->sdata.prodN, prime);
                 t->sdata.root[i] = prime - inv;
 #endif
 
@@ -466,7 +466,7 @@ void compute_roots_work_fcn(void *vptr)
             uint32_t prime = t->sdata.sieve_p[i];
 
             // slightly optimized modinv when prime >> prodN
-            inv = modinv_1c(t->sdata.prodN, prime);
+            inv = modinv3(t->sdata.prodN, prime);
             t->sdata.root[i] = prime - inv;
 
             t->sdata.lower_mod_prime[i] =
@@ -533,14 +533,14 @@ void getRoots(soe_staticdata_t *sdata, thread_soedata_t *thread_data)
         }
 
         //solve prodN ^ -1 % p 
-        inv = modinv_1(prodN, prime);
+        inv = modinv1(prodN, prime);
         sdata->root[i] = prime - inv;
     }
 
     if (sdata->VFLAG > 1)
     {
         gettimeofday(&tstop, NULL);
-        t = yafu_difftime(&tstart, &tstop);
+        t = ysieve_difftime(&tstart, &tstop);
 
         if (sdata->VFLAG > 2)
         {
@@ -602,7 +602,7 @@ void getRoots(soe_staticdata_t *sdata, thread_soedata_t *thread_data)
     {
         gettimeofday(&tstop, NULL);
 
-        t = yafu_difftime(&tstart, &tstop);
+        t = ysieve_difftime(&tstart, &tstop);
 
         if (sdata->VFLAG > 2)
         {

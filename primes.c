@@ -286,7 +286,7 @@ uint64_t primes_from_lineflags(soe_staticdata_t *sdata, thread_soedata_t *thread
     {
         gettimeofday(&tstop, NULL);
 
-        t = yafu_difftime(&tstart, &tstop);
+        t = ysieve_difftime(&tstart, &tstop);
 
         if (sdata->VFLAG > 2)
         {

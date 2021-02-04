@@ -1462,7 +1462,9 @@ char* process_expression(char* input_exp, meta_t* metadata,
         sFree(&out[i]);
     }
 
-    // return the last result
+    // return the last result.  Return a new string
+    // since the input string may not be big enough
+    // to hold the result.
     if (!no_convert_result)
     {
         get_uvar("ans", tmp);

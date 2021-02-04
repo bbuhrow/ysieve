@@ -43,8 +43,6 @@ SOFTWARE.
 #include "soe.h"
 #include "util.h"
 
-// gcc -O2  calc.h calc.c demo.c -o demo  -lgmp -lm
-
 
 int main(int argc, char** argv)
 {
@@ -140,7 +138,7 @@ int main(int argc, char** argv)
         gmp_printf("Removed %Zd composites\n", high);
         printf("Potential remaining primes: %" PRIu64 "\n", num_found);
         gettimeofday(&tstop, NULL);
-        t = yafu_difftime(&tstart, &tstop);
+        t = ysieve_difftime(&tstart, &tstop);
         printf("Elapsed time              : %1.6f seconds\n", t);
 
         mpz_clear(low);
@@ -158,12 +156,10 @@ int main(int argc, char** argv)
 
         printf("Num primes found: %" PRIu64 "\n", num_found);
         gettimeofday(&tstop, NULL);
-        t = yafu_difftime(&tstart, &tstop);
+        t = ysieve_difftime(&tstart, &tstop);
         printf("Elapsed time    : %1.6f seconds\n", t);
     }
     
-    
-
     soe_finalize(sdata);
     free(sdata);
     free(startStr);

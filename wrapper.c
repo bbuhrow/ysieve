@@ -297,7 +297,7 @@ uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highl
 					*num_p += spSOE(sdata, NULL, tmpl, &tmph, count, NULL);
 
 					gettimeofday (&stop, NULL);
-                    t_time = yafu_difftime(&start, &stop);
+                    t_time = ysieve_difftime(&start, &stop);
 
                     if (sdata->VFLAG > 1)
                     {
