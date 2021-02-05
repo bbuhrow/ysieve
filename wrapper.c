@@ -98,7 +98,10 @@ soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
 
     sdata->VFLAG = vflag;
     sdata->THREADS = threads;
-    sdata->SOEBLOCKSIZE = blocksize << 10;
+    if (blocksize > 1024)
+        sdata->SOEBLOCKSIZE = blocksize;
+    else
+        sdata->SOEBLOCKSIZE = blocksize << 10;
     return sdata;
 }
 
@@ -398,7 +401,8 @@ uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highl
 }
 
 uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
-	mpz_t lowlimit, mpz_t highlimit, int count, int num_witnesses, uint64_t *num_p,
+	mpz_t lowlimit, mpz_t highlimit, int count, int num_witnesses, 
+    uint64_t sieve_limit, uint64_t *num_p,
     int PRIMES_TO_FILE, int PRIMES_TO_SCREEN)
 {
 	// public interface to a routine which will sieve a range of integers

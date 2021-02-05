@@ -240,7 +240,8 @@ extern void soe_finalize(soe_staticdata_t* sdata);
 extern uint64_t* soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highlimit,
     int count, uint64_t* num_p, int PRIMES_TO_FILE, int PRIMES_TO_SCREEN);
 extern uint64_t* sieve_to_depth(soe_staticdata_t* sdata,
-    mpz_t lowlimit, mpz_t highlimit, int count, int num_witnesses, uint64_t* num_p,
+    mpz_t lowlimit, mpz_t highlimit, int count, int num_witnesses, 
+    uint64_t sieve_limit, uint64_t* num_p,
     int PRIMES_TO_FILE, int PRIMES_TO_SCREEN);
 
 
