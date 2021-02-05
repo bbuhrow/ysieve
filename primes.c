@@ -24,7 +24,7 @@ SOFTWARE.
 
 #include "soe.h"
 #include "soe_impl.h"
-#include "util.h"
+#include "ytools.h"
 #include "threadpool.h"
 #include <immintrin.h>
 #include <stdint.h>
@@ -286,7 +286,7 @@ uint64_t primes_from_lineflags(soe_staticdata_t *sdata, thread_soedata_t *thread
     {
         gettimeofday(&tstop, NULL);
 
-        t = ysieve_difftime(&tstart, &tstop);
+        t = ytools_difftime(&tstart, &tstop);
 
         if (sdata->VFLAG > 2)
         {

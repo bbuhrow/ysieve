@@ -23,7 +23,7 @@ SOFTWARE.
 */
 
 #include "soe.h"
-#include "util.h"
+#include "ytools.h"
 #include <immintrin.h>
 #include <stdio.h>
 #include <stdlib.h>

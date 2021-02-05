@@ -33,7 +33,7 @@ extern "C" {
 #include <stdint.h>
 #include <immintrin.h>
 #include "gmp.h"
-#include "util.h"
+#include "ytools.h"
 #include "soe.h"
 
 #define BITSINBYTE 8

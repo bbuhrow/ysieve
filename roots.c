@@ -26,7 +26,7 @@ SOFTWARE.
 #include <string.h>
 #include <math.h>
 #include "soe.h"
-#include "util.h"
+#include "ytools.h"
 #include "threadpool.h"
 #include "soe_impl.h"
 
@@ -540,7 +540,7 @@ void getRoots(soe_staticdata_t *sdata, thread_soedata_t *thread_data)
     if (sdata->VFLAG > 1)
     {
         gettimeofday(&tstop, NULL);
-        t = ysieve_difftime(&tstart, &tstop);
+        t = ytools_difftime(&tstart, &tstop);
 
         if (sdata->VFLAG > 2)
         {
@@ -602,7 +602,7 @@ void getRoots(soe_staticdata_t *sdata, thread_soedata_t *thread_data)
     {
         gettimeofday(&tstop, NULL);
 
-        t = ysieve_difftime(&tstart, &tstop);
+        t = ytools_difftime(&tstart, &tstop);
 
         if (sdata->VFLAG > 2)
         {

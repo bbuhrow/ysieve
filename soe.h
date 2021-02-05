@@ -37,7 +37,7 @@ SOFTWARE.
 
 #include "threadpool.h"
 #include "gmp.h"
-#include "util.h"
+#include "ytools.h"
 
 #define USE_SOE_THREADPOOL
 

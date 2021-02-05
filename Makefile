@@ -24,7 +24,8 @@ CC = gcc-7.3.0
 CFLAGS = -g
 WARN_FLAGS = -Wall # -Wconversion
 OPT_FLAGS = -O3
-INC = -I. 
+INC = -I. -I../../ytools.git/trunk
+LIBS = -L../../ytools.git/trunk
 BINNAME = ysieve
 OBJ_EXT = .o
 
@@ -63,8 +64,8 @@ ifeq ($(USE_AVX2),1)
 
 endif
 
-INC += -I/sppdg/scratch/buhrow/projects/gmp_install/include/
-LIBS += -L/sppdg/scratch/buhrow/projects/gmp_install/lib/ -lm -lgmp
+INC += -I../../gmp_install/include/
+LIBS += -L../../gmp_install/lib/ -lm -lgmp
 
 
 # ===================== feature options =========================
@@ -81,9 +82,9 @@ ifeq ($(STATIC),1)
 # https://software.intel.com/en-us/articles/error-ld-cannot-find-lm
 	CFLAGS += -static-intel -static
 #	LIBS += -Wl,-Bstatic -lm -Wl,Bdynamic -pthread
-  LIBS += -L/usr/lib/x86_64-redhat-linux6E/lib64/ -lpthread -lm
+  LIBS += -L/usr/lib/x86_64-redhat-linux6E/lib64/ -lpthread -lm -lytools
 else
-	LIBS += -lpthread -lm -ldl
+	LIBS += -lpthread -lytools -lm -ldl
 endif
 
 CFLAGS += $(OPT_FLAGS) $(WARN_FLAGS) $(INC)
@@ -103,10 +104,8 @@ SRCS = \
 	worker.c \
 	soe_util.c \
 	wrapper.c \
-	threadpool.c \
+	demo/calc.c \
     demo/cmdOptions.c \
-    calc.c \
-    ysieve_utils.c \
     demo/ysieve.c
 
 OBJS = $(SRCS:.c=$(OBJ_EXT))
@@ -115,8 +114,8 @@ OBJS = $(SRCS:.c=$(OBJ_EXT))
 HEAD = calc.h  \
 	soe.h  \
     soe_impl.h \
-	ysieve_util.h  \
 	threadpool.h \
+	ytools.h \
     demo/cmdOptions.h
 
 

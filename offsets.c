@@ -24,7 +24,7 @@ SOFTWARE.
 
 #include "soe.h"
 #include "immintrin.h"
-#include "util.h"
+#include "ytools.h"
 #include <math.h>
 
 

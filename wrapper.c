@@ -25,11 +25,10 @@ SOFTWARE.
 #include "soe.h"
 #include "soe_impl.h"
 #include "gmp.h"
-#include "util.h"
+#include "ytools.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <inttypes.h>
 #include <errno.h>
 #include <string.h>
 #include <math.h>
@@ -300,7 +299,7 @@ uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highl
 					*num_p += spSOE(sdata, NULL, tmpl, &tmph, count, NULL);
 
 					gettimeofday (&stop, NULL);
-                    t_time = ysieve_difftime(&start, &stop);
+                    t_time = ytools_difftime(&start, &stop);
 
                     if (sdata->VFLAG > 1)
                     {

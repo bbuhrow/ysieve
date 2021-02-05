@@ -41,7 +41,7 @@ SOFTWARE.
 #include "calc.h"
 #include "cmdOptions.h"
 #include "soe.h"
-#include "util.h"
+#include "ytools.h"
 
 
 int main(int argc, char** argv)
@@ -130,7 +130,7 @@ int main(int argc, char** argv)
             sdata->num_sp, sdata->sieve_p[sdata->num_sp - 1]);
 
         primes = sieve_to_depth(sdata, low, high, count, 1, &num_found,
-            haveFile, options->outScreen);
+            sdata->sieve_p[sdata->num_sp - 1], haveFile, options->outScreen);
 
         mpz_sub(high, high, low);
         mpz_sub_ui(high, high, num_found);
@@ -138,7 +138,7 @@ int main(int argc, char** argv)
         gmp_printf("Removed %Zd composites\n", high);
         printf("Potential remaining primes: %" PRIu64 "\n", num_found);
         gettimeofday(&tstop, NULL);
-        t = ysieve_difftime(&tstart, &tstop);
+        t = ytools_difftime(&tstart, &tstop);
         printf("Elapsed time              : %1.6f seconds\n", t);
 
         mpz_clear(low);
@@ -156,7 +156,7 @@ int main(int argc, char** argv)
 
         printf("Num primes found: %" PRIu64 "\n", num_found);
         gettimeofday(&tstop, NULL);
-        t = ysieve_difftime(&tstart, &tstop);
+        t = ytools_difftime(&tstart, &tstop);
         printf("Elapsed time    : %1.6f seconds\n", t);
     }
     

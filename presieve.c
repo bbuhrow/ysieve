@@ -24,7 +24,7 @@ SOFTWARE.
 
 #include "soe.h"
 #include "soe_impl.h"
-#include "util.h"
+#include <stdint.h>
 #include <immintrin.h> //<immintrin.h>
 
 //masks for sieving multiple locations at once: small primes

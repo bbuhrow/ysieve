@@ -24,7 +24,7 @@ SOFTWARE.
 
 #include "soe.h"
 #include "soe_impl.h"
-#include "util.h"
+#include "ytools.h"
 #include <immintrin.h>
 #include <math.h>
 #include <string.h>

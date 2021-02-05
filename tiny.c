@@ -23,7 +23,7 @@ SOFTWARE.
 */
 
 #include "soe.h"
-#include "util.h"
+#include "ytools.h"
 #include <string.h>
 #include <math.h>
 
