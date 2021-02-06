@@ -275,10 +275,10 @@ void do_soe_sieving(soe_staticdata_t* sdata, thread_soedata_t* thread_data, int 
 void finalize_sieve(soe_staticdata_t* sdata,
     thread_soedata_t* thread_data, int count, uint64_t* primes);
 
-uint32_t modinv_1(uint32_t a, uint32_t p);
-uint32_t modinv_1b(uint32_t a, uint32_t p);
-uint32_t modinv_1c(uint32_t a, uint32_t p);
-uint64_t spGCD(uint64_t x, uint64_t y);
+uint32_t modinv1(uint32_t a, uint32_t p);
+uint32_t modinv2(uint32_t a, uint32_t p);
+uint32_t modinv3(uint32_t a, uint32_t p);
+uint64_t gcd_1(uint64_t x, uint64_t y);
 
 void pre_sieve(soe_dynamicdata_t* ddata, soe_staticdata_t* sdata, uint8_t* flagblock);
 void pre_sieve_avx2(soe_dynamicdata_t* ddata, soe_staticdata_t* sdata, uint8_t* flagblock);

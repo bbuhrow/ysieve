@@ -470,7 +470,7 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
 	// allocate and initialize some stuff
 	allocated_bytes += init_sieve(sdata);
 	*highlimit = sdata->highlimit;
-	
+
 	// allocate thread data structure
 	thread_data = (thread_soedata_t *)malloc(THREADS * sizeof(thread_soedata_t));
 

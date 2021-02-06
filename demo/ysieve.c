@@ -129,8 +129,9 @@ int main(int argc, char** argv)
         printf("using %u sieve primes up to %u\n", 
             sdata->num_sp, sdata->sieve_p[sdata->num_sp - 1]);
 
-        primes = sieve_to_depth(sdata, low, high, count, 1, &num_found,
-            sdata->sieve_p[sdata->num_sp - 1], haveFile, options->outScreen);
+        primes = sieve_to_depth(sdata, low, high, count, 1,
+            sdata->sieve_p[sdata->num_sp - 1], &num_found, 
+            haveFile, options->outScreen);
 
         mpz_sub(high, high, low);
         mpz_sub_ui(high, high, num_found);

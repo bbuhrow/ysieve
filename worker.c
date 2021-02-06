@@ -29,7 +29,7 @@ SOFTWARE.
 #include "soe_impl.h"
 #include "threadpool.h"
 #include "gmp.h"
-#include "util.h"
+#include "ytools.h"
 
 #ifdef USE_SOE_THREADPOOL
 void start_soe_worker_thread(thread_soedata_t *t) {

@@ -36,6 +36,10 @@ ifeq ($(COMPILER),icc)
 	CFLAGS += -qopt-report=5
 endif
 
+ifeq ($(COMPILER),gcc)
+	CC = gcc
+endif
+
 
 # ===================== architecture options =========================
 # if this option is specified then compile *both* the sse2 and sse4.1 versions of the
@@ -64,8 +68,8 @@ ifeq ($(USE_AVX2),1)
 
 endif
 
-INC += -I../../gmp_install/include/
-LIBS += -L../../gmp_install/lib/ -lm -lgmp
+INC += -I../../gmp-install/wsl/6.1.2/include/
+LIBS += -L../../gmp-install/wsl/6.1.2/lib/ -lm -lgmp
 
 
 # ===================== feature options =========================

@@ -501,16 +501,16 @@ void getRoots(soe_staticdata_t *sdata, thread_soedata_t *thread_data)
 
     prodN = (int)sdata->prodN;
     startprime = sdata->startprime;
-
+    
     if (sdata->VFLAG > 1)
     {
         gettimeofday(&tstart, NULL);
     }
-
+    
     lblk_b = sdata->lowlimit;
     ublk_b = sdata->blk_r + lblk_b - sdata->prodN;
     blk_b_sqrt = (uint32_t)(sqrt(ublk_b + sdata->prodN)) + 1;
-
+    
     for (i = startprime; i < sdata->bucket_start_id; i++)
     {
         uint32_t inv;
