@@ -15,25 +15,25 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\calc.c">
+    <ClCompile Include="..\demo\calc.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\cmdOptions.c">
+    <ClCompile Include="..\demo\cmdOptions.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\ysieve.c">
+    <ClCompile Include="..\demo\ysieve.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\cmdOptions.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\calc.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\soe.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\demo\calc.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\demo\cmdOptions.h">
+      <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
