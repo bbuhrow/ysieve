@@ -39,13 +39,7 @@
     <ClCompile Include="..\soe_util.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\threadpool.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\tiny.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\utils.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\worker.c">
@@ -60,12 +54,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\soe_impl.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\threadpool.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
