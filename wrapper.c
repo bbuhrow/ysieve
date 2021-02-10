@@ -677,7 +677,9 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 					mpz_add_ui(tmpz, lowlimit, values[i]);
                     if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
                     {
-                        gmp_fprintf(out, "%Zd\n", tmpz);
+                        char* buf = mpz_get_str(NULL, 10, tmpz);
+                        fprintf(out, "%s\n", buf);
+                        free(buf);
                     }
 				}
 				fclose(out);
