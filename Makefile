@@ -68,8 +68,10 @@ ifeq ($(USE_AVX2),1)
 
 endif
 
-INC += -I../../gmp-install/wsl/6.1.2/include/
-LIBS += -L../../gmp-install/wsl/6.1.2/lib/ -lm -lgmp
+#INC += -I../../gmp-install/wsl/6.1.2/include/
+#LIBS += -L../../gmp-install/wsl/6.1.2/lib/ -lm -lgmp
+INC += -I../../gmp_install/gmp-6.2.0/include/
+LIBS += -L../../gmp_install/gmp-6.2.0/lib/ -lm -lgmp
 
 
 # ===================== feature options =========================

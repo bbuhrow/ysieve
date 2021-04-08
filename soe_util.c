@@ -323,7 +323,17 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
 #ifdef USE_AVX512Fa
         sieve_line_ptr = &sieve_line_avx512_32k;
 #elif defined(USE_AVX2)
-        sieve_line_ptr = &sieve_line_avx2_32k;
+
+#ifdef __INTEL_COMPILER
+        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
+#elif defined(__GNUC__)
+        if (__builtin_cpu_supports("avx2"))
+#else
+        if (0)
+#endif
+        {
+            sieve_line_ptr = &sieve_line_avx2_32k;
+        }
 #endif
         break;
     case 65536:
@@ -334,14 +344,44 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
         sdata->FLAGBITS = 20;
         sdata->BUCKETSTARTI = 123040;
 #ifdef USE_AVX512F
-        sieve_line_ptr = &sieve_line_avx512_128k;
+
+#ifdef __INTEL_COMPILER
+        if (_may_i_use_cpu_feature(_FEATURE_AVX512F))
+#elif defined(__GNUC__)
+        if (__builtin_cpu_supports("avx512f"))
+#else
+        if (0)
+#endif
+        {
+            sieve_line_ptr = &sieve_line_avx512_128k;
+        }
 #elif defined(USE_AVX2)
-        sieve_line_ptr = &sieve_line_avx2_128k;
+#ifdef __INTEL_COMPILER
+        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
+#elif defined(__GNUC__)
+        if (__builtin_cpu_supports("avx2"))
+#else
+        if (0)
+#endif
+        {
+            sieve_line_ptr = &sieve_line_avx2_128k;
+        }
 #endif
         break;
     case 262144:
 #ifdef USE_AVX512F
-        sieve_line_ptr = &sieve_line_avx512_256k;
+
+#ifdef __INTEL_COMPILER
+        if (_may_i_use_cpu_feature(_FEATURE_AVX512F))
+#elif defined(__GNUC__)
+        if (__builtin_cpu_supports("avx512f"))
+#else
+        if (0)
+#endif
+        {
+            sieve_line_ptr = &sieve_line_avx512_256k;
+        }
+
 #elif defined(USE_AVX2)
 
 #endif
@@ -350,7 +390,18 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
         break;
     case 524288:
 #ifdef USE_AVX512F
-        sieve_line_ptr = &sieve_line_avx512_512k;
+
+#ifdef __INTEL_COMPILER
+        if (_may_i_use_cpu_feature(_FEATURE_AVX512F))
+#elif defined(__GNUC__)
+        if (__builtin_cpu_supports("avx512f"))
+#else
+        if (0)
+#endif
+        {
+            sieve_line_ptr = &sieve_line_avx512_512k;
+        }
+
 #elif defined(USE_AVX2)
         // the non-avx2 sieve is better, at least,
         // for huge offsets when you might be using this blocksize.
@@ -387,7 +438,16 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
             startprime = 4;
         }
 #if defined(USE_AVX2)
-        sdata->use_monty = 1;
+#ifdef __INTEL_COMPILER
+        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
+#elif defined(__GNUC__)
+        if (__builtin_cpu_supports("avx2"))
+#else
+        if (0)
+#endif
+        {
+            sdata->use_monty = 1;
+        }
 #endif
 	}	
 	else if ((highlimit - lowlimit) > 4000000000ULL)
@@ -396,7 +456,16 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
         prodN = 210;
         startprime = 4;
 #if defined(USE_AVX2)
-        sdata->use_monty = 1;
+#ifdef __INTEL_COMPILER
+        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
+#elif defined(__GNUC__)
+        if (__builtin_cpu_supports("avx2"))
+#else
+        if (0)
+#endif
+        {
+            sdata->use_monty = 1;
+        }
 #endif
 	}
 	else if ((highlimit - lowlimit) > 100000000)
@@ -405,7 +474,16 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
 		prodN=30;
 		startprime=3;
 #if defined(USE_AVX2)
-        sdata->use_monty = 1;
+#ifdef __INTEL_COMPILER
+        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
+#elif defined(__GNUC__)
+        if (__builtin_cpu_supports("avx2"))
+#else
+        if (0)
+#endif
+        {
+            sdata->use_monty = 1;
+        }
 #endif
 	}
 	else
@@ -873,7 +951,7 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
 #elif defined(__GNUC__)
     if (__builtin_cpu_supports("avx2"))
 #else
-    if (1)
+    if (0)
 #endif
     {
         pre_sieve_ptr = &pre_sieve_avx2;
