@@ -211,8 +211,8 @@ int processOpts(int argc, char** argv, options_t* options)
     // on the command line filled in.  Return the number of options
     // processed.
     int i, j, k = 0, valid, longswitch = 0;
-    char optbuf[MAXOPTIONLEN];
-    char argbuf[MAXARGLEN];
+    char optbuf[MAXOPTIONLEN+1];
+    char argbuf[MAXARGLEN+1];
     int numOpt = 0;
 
     //argument loop

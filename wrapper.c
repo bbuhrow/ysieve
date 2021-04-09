@@ -92,7 +92,7 @@ soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
     sdata = (soe_staticdata_t*)malloc(sizeof(soe_staticdata_t));
 
     // bootstrap the sieve
-    sdata->sieve_p = (uint32_t*)xmalloc(65536 * sizeof(uint32_t));
+    sdata->sieve_p = (uint32_t*)xmalloc_align(65536 * sizeof(uint32_t));
     sdata->num_sp = tiny_soe(65536, sdata->sieve_p);
 
     sdata->VFLAG = vflag;
@@ -106,7 +106,7 @@ soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
 
 void soe_finalize(soe_staticdata_t* sdata)
 {
-    free(sdata->sieve_p);
+    align_free(sdata->sieve_p);
     return;
 }
 

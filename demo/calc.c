@@ -608,8 +608,8 @@ str_t* preprocess(str_t* in, int* numlines)
     // We return the number of lines found and an array of strings,
     // one line per string.  user must free 'out'.
     int i, j, k;
-    char* ptr;
-    char str[1024];
+    //char* ptr;
+    //char str[1024];
     int openp, closedp, openb, closedb;
     str_t* out;
     str_t* current;
@@ -663,6 +663,7 @@ str_t* preprocess(str_t* in, int* numlines)
     // taking string arguments, where the arguments are the various text
     // components of the function.  The actual looping is handled by 
     // recursive calls to process_expression from within the function evaluator.
+    /*
     if (((ptr = strstr(current->s, "for(")) != NULL) &&
         exp_is_closed(current->s, ptr))
     {
@@ -917,8 +918,9 @@ str_t* preprocess(str_t* in, int* numlines)
         else if (eptr[strlen(eptr) + 1] == '\0')
         {
             // no else statement and no output suppression character
-            strncpy(str, eptr, strlen(eptr) - 1);
-            str[strlen(eptr) - 1] = '\0';
+            int len = strlen(eptr);
+            strncpy(str, eptr, len - 1);
+            str[len - 1] = '\0';
             sprintf(vname, "%s_body", pre);
             if (set_strvar(vname, str))
                 new_strvar(vname, str);
@@ -937,8 +939,9 @@ str_t* preprocess(str_t* in, int* numlines)
                     new_strvar(vname, str);
 
                 ptr = strtok(NULL, "\0");
-                strncpy(str, ptr, strlen(ptr) - 1);
-                str[strlen(ptr) - 1] = '\0';
+                int len = strlen(ptr);
+                strncpy(str, ptr, len - 1);
+                str[len - 1] = '\0';
                 sprintf(vname, "%s_elsebody", pre);
                 if (set_strvar(vname, str))
                     new_strvar(vname, str);
@@ -964,8 +967,9 @@ str_t* preprocess(str_t* in, int* numlines)
                     new_strvar(vname, str);
 
                 ptr = strtok(NULL, "\0");
-                strncpy(str, ptr, strlen(ptr) - 1);
-                str[strlen(ptr) - 1] = '\0';
+                int len = strlen(ptr);
+                strncpy(str, ptr, len - 1);
+                str[len - 1] = '\0';
                 sprintf(vname, "%s_elsebody", pre);
                 if (set_strvar(vname, str))
                     new_strvar(vname, str);
@@ -975,6 +979,7 @@ str_t* preprocess(str_t* in, int* numlines)
             }
         }
     }
+    */
 
     // search for commas within 'closed' areas and separate them into
     // a sequence of individual expressions.  A 'closed' area is text

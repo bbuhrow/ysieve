@@ -27,6 +27,8 @@ SOFTWARE.
 #include <stdint.h>
 #include <immintrin.h> //<immintrin.h>
 
+//void (*pre_sieve_ptr)(soe_dynamicdata_t*, soe_staticdata_t*, uint8_t*);
+
 //masks for sieving multiple locations at once: small primes
 //that hit a 64 bit interval more than once.  
 int _64_MOD_P[9] = { 4, 1, 9, 12, 13, 7, 18, 6, 2 };
@@ -41,14 +43,14 @@ int _512_MOD_P[22] = { 2, 1, 6, 5, 2, 18, 6, 19,
 16, 31, 20, 39, 42, 35, 40, 24, 
 43, 15, 1, 38, 14, 67 };
 
-uint64_t _5_MASKS_256[5 * 4] = {
+ALIGNED_MEM uint64_t _5_MASKS_256[5 * 4] = {
     0xef7bdef7bdef7bdeULL, 0xdef7bdef7bdef7bdULL, 0xbdef7bdef7bdef7bULL, 0x7bdef7bdef7bdef7ULL,
     0xdef7bdef7bdef7bdULL, 0xbdef7bdef7bdef7bULL, 0x7bdef7bdef7bdef7ULL, 0xf7bdef7bdef7bdefULL,
     0xbdef7bdef7bdef7bULL, 0x7bdef7bdef7bdef7ULL, 0xf7bdef7bdef7bdefULL, 0xef7bdef7bdef7bdeULL,
     0x7bdef7bdef7bdef7ULL, 0xf7bdef7bdef7bdefULL, 0xef7bdef7bdef7bdeULL, 0xdef7bdef7bdef7bdULL,
     0xf7bdef7bdef7bdefULL, 0xef7bdef7bdef7bdeULL, 0xdef7bdef7bdef7bdULL, 0xbdef7bdef7bdef7bULL };
 
-uint64_t _7_MASKS_256[7 * 4] = {
+ALIGNED_MEM uint64_t _7_MASKS_256[7 * 4] = {
     0x7efdfbf7efdfbf7eULL, 0xbf7efdfbf7efdfbfULL, 0xdfbf7efdfbf7efdfULL, 0xefdfbf7efdfbf7efULL,
     0xfdfbf7efdfbf7efdULL, 0x7efdfbf7efdfbf7eULL, 0xbf7efdfbf7efdfbfULL, 0xdfbf7efdfbf7efdfULL,
     0xfbf7efdfbf7efdfbULL, 0xfdfbf7efdfbf7efdULL, 0x7efdfbf7efdfbf7eULL, 0xbf7efdfbf7efdfbfULL,
@@ -57,7 +59,7 @@ uint64_t _7_MASKS_256[7 * 4] = {
     0xdfbf7efdfbf7efdfULL, 0xefdfbf7efdfbf7efULL, 0xf7efdfbf7efdfbf7ULL, 0xfbf7efdfbf7efdfbULL,
     0xbf7efdfbf7efdfbfULL, 0xdfbf7efdfbf7efdfULL, 0xefdfbf7efdfbf7efULL, 0xf7efdfbf7efdfbf7ULL };
 
-uint64_t _11_MASKS_256[11 * 4] = {
+ALIGNED_MEM uint64_t _11_MASKS_256[11 * 4] = {
     0xff7feffdffbff7feULL, 0xfdffbff7feffdffbULL, 0xf7feffdffbff7fefULL, 0xdffbff7feffdffbfULL,
     0xfeffdffbff7feffdULL, 0xfbff7feffdffbff7ULL, 0xeffdffbff7feffdfULL, 0xbff7feffdffbff7fULL,
     0xfdffbff7feffdffbULL, 0xf7feffdffbff7fefULL, 0xdffbff7feffdffbfULL, 0x7feffdffbff7feffULL,
@@ -70,7 +72,7 @@ uint64_t _11_MASKS_256[11 * 4] = {
     0xffdffbff7feffdffULL, 0xff7feffdffbff7feULL, 0xfdffbff7feffdffbULL, 0xf7feffdffbff7fefULL,
     0xffbff7feffdffbffULL, 0xfeffdffbff7feffdULL, 0xfbff7feffdffbff7ULL, 0xeffdffbff7feffdfULL };
 
-uint64_t _13_MASKS_256[13 * 4] = {
+ALIGNED_MEM uint64_t _13_MASKS_256[13 * 4] = {
     0xffefff7ffbffdffeULL, 0xffdffefff7ffbffdULL, 0xffbffdffefff7ffbULL, 0xff7ffbffdffefff7ULL,
     0xffdffefff7ffbffdULL, 0xffbffdffefff7ffbULL, 0xff7ffbffdffefff7ULL, 0xfefff7ffbffdffefULL,
     0xffbffdffefff7ffbULL, 0xff7ffbffdffefff7ULL, 0xfefff7ffbffdffefULL, 0xfdffefff7ffbffdfULL,
@@ -85,7 +87,7 @@ uint64_t _13_MASKS_256[13 * 4] = {
     0x7ffbffdffefff7ffULL, 0xfff7ffbffdffefffULL, 0xffefff7ffbffdffeULL, 0xffdffefff7ffbffdULL,
     0xfff7ffbffdffefffULL, 0xffefff7ffbffdffeULL, 0xffdffefff7ffbffdULL, 0xffbffdffefff7ffbULL };
 
-uint64_t _17_MASKS_256[17 * 4] = {
+ALIGNED_MEM uint64_t _17_MASKS_256[17 * 4] = {
     0xfff7fffbfffdfffeULL, 0xff7fffbfffdfffefULL, 0xf7fffbfffdfffeffULL, 0x7fffbfffdfffefffULL,
     0xffeffff7fffbfffdULL, 0xfeffff7fffbfffdfULL, 0xeffff7fffbfffdffULL, 0xffff7fffbfffdfffULL,
     0xffdfffeffff7fffbULL, 0xfdfffeffff7fffbfULL, 0xdfffeffff7fffbffULL, 0xfffeffff7fffbfffULL,
@@ -104,7 +106,7 @@ uint64_t _17_MASKS_256[17 * 4] = {
     0xfffdfffeffff7fffULL, 0xffdfffeffff7fffbULL, 0xfdfffeffff7fffbfULL, 0xdfffeffff7fffbffULL,
     0xfffbfffdfffeffffULL, 0xffbfffdfffeffff7ULL, 0xfbfffdfffeffff7fULL, 0xbfffdfffeffff7ffULL };
 
-uint64_t _19_MASKS_256[19 * 4] = {
+ALIGNED_MEM uint64_t _19_MASKS_256[19 * 4] = {
     0xfdffffbffff7fffeULL, 0xfffbffff7fffefffULL, 0xbffff7fffeffffdfULL, 0xff7fffeffffdffffULL,
     0xfbffff7fffeffffdULL, 0xfff7fffeffffdfffULL, 0x7fffeffffdffffbfULL, 0xfeffffdffffbffffULL,
     0xf7fffeffffdffffbULL, 0xffeffffdffffbfffULL, 0xffffdffffbffff7fULL, 0xfdffffbffff7fffeULL,
@@ -125,7 +127,7 @@ uint64_t _19_MASKS_256[19 * 4] = {
     0xff7fffeffffdffffULL, 0xfffeffffdffffbffULL, 0xeffffdffffbffff7ULL, 0xffdffffbffff7fffULL,
     0xfeffffdffffbffffULL, 0xfffdffffbffff7ffULL, 0xdffffbffff7fffefULL, 0xffbffff7fffeffffULL };
 
-uint64_t _23_MASKS_256[23 * 4] = {
+ALIGNED_MEM uint64_t _23_MASKS_256[23 * 4] = {
     0xffffbfffff7ffffeULL, 0xfff7ffffefffffdfULL, 0xfefffffdfffffbffULL, 0xdfffffbfffff7fffULL,
     0xffff7ffffefffffdULL, 0xffefffffdfffffbfULL, 0xfdfffffbfffff7ffULL, 0xbfffff7ffffeffffULL,
     0xfffefffffdfffffbULL, 0xffdfffffbfffff7fULL, 0xfbfffff7ffffefffULL, 0x7ffffefffffdffffULL,
@@ -150,7 +152,7 @@ uint64_t _23_MASKS_256[23 * 4] = {
     0xffffefffffdfffffULL, 0xfffdfffffbfffff7ULL, 0xffbfffff7ffffeffULL, 0xf7ffffefffffdfffULL,
     0xffffdfffffbfffffULL, 0xfffbfffff7ffffefULL, 0xff7ffffefffffdffULL, 0xefffffdfffffbfffULL };
 
-uint64_t _29_MASKS_256[29 * 4] = {
+ALIGNED_MEM uint64_t _29_MASKS_256[29 * 4] = {
     0xfbffffffdffffffeULL, 0xffefffffff7fffffULL, 0xffffbffffffdffffULL, 0xfffffefffffff7ffULL,
     0xf7ffffffbffffffdULL, 0xffdffffffeffffffULL, 0xffff7ffffffbffffULL, 0xfffffdffffffefffULL,
     0xefffffff7ffffffbULL, 0xffbffffffdffffffULL, 0xfffefffffff7ffffULL, 0xfffffbffffffdfffULL,
@@ -181,7 +183,7 @@ uint64_t _29_MASKS_256[29 * 4] = {
     0xfefffffff7ffffffULL, 0xfffbffffffdfffffULL, 0xffffefffffff7fffULL, 0xffffffbffffffdffULL,
     0xfdffffffefffffffULL, 0xfff7ffffffbfffffULL, 0xffffdffffffeffffULL, 0xffffff7ffffffbffULL };
 
-uint64_t _31_MASKS_256[31 * 4] = {
+ALIGNED_MEM uint64_t _31_MASKS_256[31 * 4] = {
     0xbfffffff7ffffffeULL, 0xefffffffdfffffffULL, 0xfbfffffff7ffffffULL, 0xfefffffffdffffffULL,
     0x7ffffffefffffffdULL, 0xdfffffffbfffffffULL, 0xf7ffffffefffffffULL, 0xfdfffffffbffffffULL,
     0xfffffffdfffffffbULL, 0xbfffffff7ffffffeULL, 0xefffffffdfffffffULL, 0xfbfffffff7ffffffULL,
@@ -214,7 +216,7 @@ uint64_t _31_MASKS_256[31 * 4] = {
     0xefffffffdfffffffULL, 0xfbfffffff7ffffffULL, 0xfefffffffdffffffULL, 0xffbfffffff7fffffULL,
     0xdfffffffbfffffffULL, 0xf7ffffffefffffffULL, 0xfdfffffffbffffffULL, 0xff7ffffffeffffffULL };
 
-uint64_t _37_MASKS_256[37 * 4] = {
+ALIGNED_MEM uint64_t _37_MASKS_256[37 * 4] = {
     0xffffffdffffffffeULL, 0xffff7ffffffffbffULL, 0xfdffffffffefffffULL, 0xffffffffbfffffffULL,
     0xffffffbffffffffdULL, 0xfffefffffffff7ffULL, 0xfbffffffffdfffffULL, 0xffffffff7fffffffULL,
     0xffffff7ffffffffbULL, 0xfffdffffffffefffULL, 0xf7ffffffffbfffffULL, 0xfffffffeffffffffULL,
@@ -253,7 +255,7 @@ uint64_t _37_MASKS_256[37 * 4] = {
     0xfffffff7ffffffffULL, 0xffffdffffffffeffULL, 0xff7ffffffffbffffULL, 0xffffffffefffffffULL,
     0xffffffefffffffffULL, 0xffffbffffffffdffULL, 0xfefffffffff7ffffULL, 0xffffffffdfffffffULL };
 
-uint64_t _41_MASKS_256[41 * 4] = {
+ALIGNED_MEM uint64_t _41_MASKS_256[41 * 4] = {
     0xfffffdfffffffffeULL, 0xf7fffffffffbffffULL, 0xffffffefffffffffULL, 0xffbfffffffffdfffULL,
     0xfffffbfffffffffdULL, 0xeffffffffff7ffffULL, 0xffffffdfffffffffULL, 0xff7fffffffffbfffULL,
     0xfffff7fffffffffbULL, 0xdfffffffffefffffULL, 0xffffffbfffffffffULL, 0xfeffffffffff7fffULL,
@@ -296,7 +298,7 @@ uint64_t _41_MASKS_256[41 * 4] = {
     0xffffff7fffffffffULL, 0xfdfffffffffeffffULL, 0xfffffffbffffffffULL, 0xffeffffffffff7ffULL,
     0xfffffeffffffffffULL, 0xfbfffffffffdffffULL, 0xfffffff7ffffffffULL, 0xffdfffffffffefffULL };
 
-uint64_t _43_MASKS_256[43 * 4] = {
+ALIGNED_MEM uint64_t _43_MASKS_256[43 * 4] = {
     0xfffff7fffffffffeULL, 0xffffffffffbfffffULL, 0xffffeffffffffffdULL, 0xffffffffff7fffffULL,
     0xffffeffffffffffdULL, 0xffffffffff7fffffULL, 0xffffdffffffffffbULL, 0xfffffffffeffffffULL,
     0xffffdffffffffffbULL, 0xfffffffffeffffffULL, 0xffffbffffffffff7ULL, 0xfffffffffdffffffULL,
@@ -341,7 +343,7 @@ uint64_t _43_MASKS_256[43 * 4] = {
     0xfffffdffffffffffULL, 0x7fffffffffefffffULL, 0xfffffbffffffffffULL, 0xffffffffffdfffffULL,
     0xfffffbffffffffffULL, 0xffffffffffdfffffULL, 0xfffff7fffffffffeULL, 0xffffffffffbfffffULL };
 
-uint64_t _47_MASKS_256[47 * 4] = {
+ALIGNED_MEM uint64_t _47_MASKS_256[47 * 4] = {
     0xffff7ffffffffffeULL, 0xffffffffbfffffffULL, 0xefffffffffffdfffULL, 0xfffff7ffffffffffULL,
     0xfffefffffffffffdULL, 0xffffffff7fffffffULL, 0xdfffffffffffbfffULL, 0xffffefffffffffffULL,
     0xfffdfffffffffffbULL, 0xfffffffeffffffffULL, 0xbfffffffffff7fffULL, 0xffffdfffffffffffULL,
@@ -390,7 +392,7 @@ uint64_t _47_MASKS_256[47 * 4] = {
     0xffffdfffffffffffULL, 0xffffffffefffffffULL, 0xfbfffffffffff7ffULL, 0xfffffdffffffffffULL,
     0xffffbfffffffffffULL, 0xffffffffdfffffffULL, 0xf7ffffffffffefffULL, 0xfffffbffffffffffULL };
 
-uint64_t _53_MASKS_256[53 * 4] = {
+ALIGNED_MEM uint64_t _53_MASKS_256[53 * 4] = {
     0xffdffffffffffffeULL, 0xfffffbffffffffffULL, 0xffffffff7fffffffULL, 0xffffffffffefffffULL,
     0xffbffffffffffffdULL, 0xfffff7ffffffffffULL, 0xfffffffeffffffffULL, 0xffffffffffdfffffULL,
     0xff7ffffffffffffbULL, 0xffffefffffffffffULL, 0xfffffffdffffffffULL, 0xffffffffffbfffffULL,
@@ -445,7 +447,7 @@ uint64_t _53_MASKS_256[53 * 4] = {
     0xfff7ffffffffffffULL, 0xfffffeffffffffffULL, 0xffffffffdfffffffULL, 0xfffffffffffbffffULL,
     0xffefffffffffffffULL, 0xfffffdffffffffffULL, 0xffffffffbfffffffULL, 0xfffffffffff7ffffULL };
 
-uint64_t _59_MASKS_256[59 * 4] = {
+ALIGNED_MEM uint64_t _59_MASKS_256[59 * 4] = {
     0xf7fffffffffffffeULL, 0xffbfffffffffffffULL, 0xfffdffffffffffffULL, 0xffffefffffffffffULL,
     0xeffffffffffffffdULL, 0xff7fffffffffffffULL, 0xfffbffffffffffffULL, 0xffffdfffffffffffULL,
     0xdffffffffffffffbULL, 0xfeffffffffffffffULL, 0xfff7ffffffffffffULL, 0xffffbfffffffffffULL,
@@ -506,7 +508,7 @@ uint64_t _59_MASKS_256[59 * 4] = {
     0xfdffffffffffffffULL, 0xffefffffffffffffULL, 0xffff7fffffffffffULL, 0xfffffbffffffffffULL,
     0xfbffffffffffffffULL, 0xffdfffffffffffffULL, 0xfffeffffffffffffULL, 0xfffff7ffffffffffULL };
 
-uint64_t _61_MASKS_256[61 * 4] = {
+ALIGNED_MEM uint64_t _61_MASKS_256[61 * 4] = {
     0xdffffffffffffffeULL, 0xfbffffffffffffffULL, 0xff7fffffffffffffULL, 0xffefffffffffffffULL,
     0xbffffffffffffffdULL, 0xf7ffffffffffffffULL, 0xfeffffffffffffffULL, 0xffdfffffffffffffULL,
     0x7ffffffffffffffbULL, 0xefffffffffffffffULL, 0xfdffffffffffffffULL, 0xffbfffffffffffffULL,
@@ -569,7 +571,7 @@ uint64_t _61_MASKS_256[61 * 4] = {
     0xf7ffffffffffffffULL, 0xfeffffffffffffffULL, 0xffdfffffffffffffULL, 0xfffbffffffffffffULL,
     0xefffffffffffffffULL, 0xfdffffffffffffffULL, 0xffbfffffffffffffULL, 0xfff7ffffffffffffULL };
 
-uint64_t _67_MASKS_256[67 * 4] = {
+ALIGNED_MEM uint64_t _67_MASKS_256[67 * 4] = {
     0xfffffffffffffffeULL, 0xfffffffffffffff7ULL, 0xffffffffffffffbfULL, 0xfffffffffffffdffULL,
     0xfffffffffffffffdULL, 0xffffffffffffffefULL, 0xffffffffffffff7fULL, 0xfffffffffffffbffULL,
     0xfffffffffffffffbULL, 0xffffffffffffffdfULL, 0xfffffffffffffeffULL, 0xfffffffffffff7ffULL,
@@ -638,7 +640,7 @@ uint64_t _67_MASKS_256[67 * 4] = {
     0xffffffffffffffffULL, 0xfffffffffffffffdULL, 0xffffffffffffffefULL, 0xffffffffffffff7fULL,
     0xffffffffffffffffULL, 0xfffffffffffffffbULL, 0xffffffffffffffdfULL, 0xfffffffffffffeffULL };
 
-uint64_t _71_MASKS_256[71 * 4] = {
+ALIGNED_MEM uint64_t _71_MASKS_256[71 * 4] = {
     0xfffffffffffffffeULL, 0xffffffffffffff7fULL, 0xffffffffffffbfffULL, 0xffffffffffdfffffULL,
     0xfffffffffffffffdULL, 0xfffffffffffffeffULL, 0xffffffffffff7fffULL, 0xffffffffffbfffffULL,
     0xfffffffffffffffbULL, 0xfffffffffffffdffULL, 0xfffffffffffeffffULL, 0xffffffffff7fffffULL,
@@ -711,7 +713,7 @@ uint64_t _71_MASKS_256[71 * 4] = {
     0xffffffffffffffffULL, 0xffffffffffffffdfULL, 0xffffffffffffefffULL, 0xfffffffffff7ffffULL,
     0xffffffffffffffffULL, 0xffffffffffffffbfULL, 0xffffffffffffdfffULL, 0xffffffffffefffffULL };
 
-uint64_t _73_MASKS_256[73 * 4] = {
+ALIGNED_MEM uint64_t _73_MASKS_256[73 * 4] = {
     0xfffffffffffffffeULL, 0xfffffffffffffdffULL, 0xfffffffffffbffffULL, 0xfffffffff7ffffffULL,
     0xfffffffffffffffdULL, 0xfffffffffffffbffULL, 0xfffffffffff7ffffULL, 0xffffffffefffffffULL,
     0xfffffffffffffffbULL, 0xfffffffffffff7ffULL, 0xffffffffffefffffULL, 0xffffffffdfffffffULL,
@@ -786,7 +788,7 @@ uint64_t _73_MASKS_256[73 * 4] = {
     0xffffffffffffffffULL, 0xffffffffffffff7fULL, 0xfffffffffffeffffULL, 0xfffffffffdffffffULL,
     0xffffffffffffffffULL, 0xfffffffffffffeffULL, 0xfffffffffffdffffULL, 0xfffffffffbffffffULL };
 
-uint64_t _79_MASKS_256[79 * 4] = {
+ALIGNED_MEM uint64_t _79_MASKS_256[79 * 4] = {
     0xfffffffffffffffeULL, 0xffffffffffff7fffULL, 0xffffffffbfffffffULL, 0xffffdfffffffffffULL,
     0xfffffffffffffffdULL, 0xfffffffffffeffffULL, 0xffffffff7fffffffULL, 0xffffbfffffffffffULL,
     0xfffffffffffffffbULL, 0xfffffffffffdffffULL, 0xfffffffeffffffffULL, 0xffff7fffffffffffULL,
@@ -867,7 +869,7 @@ uint64_t _79_MASKS_256[79 * 4] = {
     0xffffffffffffffffULL, 0xffffffffffffdfffULL, 0xffffffffefffffffULL, 0xfffff7ffffffffffULL,
     0xffffffffffffffffULL, 0xffffffffffffbfffULL, 0xffffffffdfffffffULL, 0xffffefffffffffffULL };
 
-uint64_t _83_MASKS_256[83 * 4] = {
+ALIGNED_MEM uint64_t _83_MASKS_256[83 * 4] = {
     0xfffffffffffffffeULL, 0xfffffffffff7ffffULL, 0xffffffbfffffffffULL, 0xfdffffffffffffffULL,
     0xfffffffffffffffdULL, 0xffffffffffefffffULL, 0xffffff7fffffffffULL, 0xfbffffffffffffffULL,
     0xfffffffffffffffbULL, 0xffffffffffdfffffULL, 0xfffffeffffffffffULL, 0xf7ffffffffffffffULL,
@@ -952,7 +954,7 @@ uint64_t _83_MASKS_256[83 * 4] = {
     0xffffffffffffffffULL, 0xfffffffffffdffffULL, 0xffffffefffffffffULL, 0xff7fffffffffffffULL,
     0xffffffffffffffffULL, 0xfffffffffffbffffULL, 0xffffffdfffffffffULL, 0xfeffffffffffffffULL };
 
-uint64_t _89_MASKS_256[89 * 4] = {
+ALIGNED_MEM uint64_t _89_MASKS_256[89 * 4] = {
     0xfffffffffffffffeULL, 0xfffffffffdffffffULL, 0xfffbffffffffffffULL, 0xffffffffffffffffULL,
     0xfffffffffffffffdULL, 0xfffffffffbffffffULL, 0xfff7ffffffffffffULL, 0xffffffffffffffffULL,
     0xfffffffffffffffbULL, 0xfffffffff7ffffffULL, 0xffefffffffffffffULL, 0xffffffffffffffffULL,
@@ -1044,14 +1046,14 @@ uint64_t _89_MASKS_256[89 * 4] = {
     0xffffffffffffffffULL, 0xfffffffffeffffffULL, 0xfffdffffffffffffULL, 0xffffffffffffffffULL };
 
 
-uint64_t _5_MASKS[5] = {
+ALIGNED_MEM uint64_t _5_MASKS[5] = {
     0xef7bdef7bdef7bdeULL,
     0xdef7bdef7bdef7bdULL,
     0xbdef7bdef7bdef7bULL,
     0x7bdef7bdef7bdef7ULL,
     0xf7bdef7bdef7bdefULL };
 
-uint64_t _7_MASKS[7] = {
+ALIGNED_MEM uint64_t _7_MASKS[7] = {
     0x7efdfbf7efdfbf7eULL,
     0xfdfbf7efdfbf7efdULL,
     0xfbf7efdfbf7efdfbULL,
@@ -1060,7 +1062,7 @@ uint64_t _7_MASKS[7] = {
     0xdfbf7efdfbf7efdfULL,
     0xbf7efdfbf7efdfbfULL };
 
-uint64_t _11_MASKS[11] = {
+ALIGNED_MEM uint64_t _11_MASKS[11] = {
     0xff7feffdffbff7feULL,
     0xfeffdffbff7feffdULL,
     0xfdffbff7feffdffbULL,
@@ -1073,7 +1075,7 @@ uint64_t _11_MASKS[11] = {
     0xffdffbff7feffdffULL,
     0xffbff7feffdffbffULL };
 
-uint64_t _13_MASKS[13] = {
+ALIGNED_MEM uint64_t _13_MASKS[13] = {
     0xffefff7ffbffdffeULL,
     0xffdffefff7ffbffdULL,
     0xffbffdffefff7ffbULL,
@@ -1088,7 +1090,7 @@ uint64_t _13_MASKS[13] = {
     0x7ffbffdffefff7ffULL,
     0xfff7ffbffdffefffULL };
 
-uint64_t _17_MASKS[17] = {
+ALIGNED_MEM uint64_t _17_MASKS[17] = {
     0xfff7fffbfffdfffeULL,
     0xffeffff7fffbfffdULL,
     0xffdfffeffff7fffbULL,
@@ -1107,7 +1109,7 @@ uint64_t _17_MASKS[17] = {
     0xfffdfffeffff7fffULL,
     0xfffbfffdfffeffffULL };
 
-uint64_t _19_MASKS[19] = {
+ALIGNED_MEM uint64_t _19_MASKS[19] = {
     0xfdffffbffff7fffeULL,
     0xfbffff7fffeffffdULL,
     0xf7fffeffffdffffbULL,
@@ -1128,7 +1130,7 @@ uint64_t _19_MASKS[19] = {
     0xff7fffeffffdffffULL,
     0xfeffffdffffbffffULL };
 
-uint64_t _23_MASKS[23] = {
+ALIGNED_MEM uint64_t _23_MASKS[23] = {
     0xffffbfffff7ffffeULL,
     0xffff7ffffefffffdULL,
     0xfffefffffdfffffbULL,
@@ -1153,7 +1155,7 @@ uint64_t _23_MASKS[23] = {
     0xffffefffffdfffffULL,
     0xffffdfffffbfffffULL };
 
-uint64_t _29_MASKS[29] = {
+ALIGNED_MEM uint64_t _29_MASKS[29] = {
     0xfbffffffdffffffeULL,
     0xf7ffffffbffffffdULL,
     0xefffffff7ffffffbULL,
