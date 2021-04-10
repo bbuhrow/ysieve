@@ -45,6 +45,11 @@ typedef struct
     thread_soedata_t *ddata;
 } bitmap_userdata_t;
 
+// define the fat-binary function pointers
+uint32_t(*compute_8_bytes_ptr)(soe_staticdata_t*, uint32_t, uint64_t*, uint64_t);
+void (*pre_sieve_ptr)(soe_dynamicdata_t*, soe_staticdata_t*, uint8_t*);
+void(*sieve_line_ptr)(thread_soedata_t*);
+
 void sieve_sync(void *vptr)
 {
     tpool_t *tdata = (tpool_t *)vptr;

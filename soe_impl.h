@@ -235,7 +235,6 @@ void sieve_line_avx512_64k(thread_soedata_t* thread_data);
 void sieve_line_avx512_128k(thread_soedata_t* thread_data);
 void sieve_line_avx512_256k(thread_soedata_t* thread_data);
 void sieve_line_avx512_512k(thread_soedata_t* thread_data);
-void(*sieve_line_ptr)(thread_soedata_t*);
 
 
 uint64_t count_line(soe_staticdata_t* sdata, uint32_t current_line);
@@ -283,15 +282,17 @@ uint64_t gcd_1(uint64_t x, uint64_t y);
 void pre_sieve(soe_dynamicdata_t* ddata, soe_staticdata_t* sdata, uint8_t* flagblock);
 void pre_sieve_avx2(soe_dynamicdata_t* ddata, soe_staticdata_t* sdata, uint8_t* flagblock);
 void pre_sieve_avx512(soe_dynamicdata_t* ddata, soe_staticdata_t* sdata, uint8_t* flagblock);
-void (*pre_sieve_ptr)(soe_dynamicdata_t*, soe_staticdata_t*, uint8_t*);
+
 
 uint32_t compute_8_bytes(soe_staticdata_t* sdata,
     uint32_t pcount, uint64_t* primes, uint64_t byte_offset);
 uint32_t compute_8_bytes_bmi2(soe_staticdata_t* sdata,
     uint32_t pcount, uint64_t* primes, uint64_t byte_offset);
-uint32_t(*compute_8_bytes_ptr)(soe_staticdata_t*, uint32_t, uint64_t*, uint64_t);
 
-
+// declare the fat-binary function pointers	
+extern uint32_t(*compute_8_bytes_ptr)(soe_staticdata_t*, uint32_t, uint64_t*, uint64_t);
+extern void (*pre_sieve_ptr)(soe_dynamicdata_t*, soe_staticdata_t*, uint8_t*);
+extern void(*sieve_line_ptr)(thread_soedata_t*);
 
 
 

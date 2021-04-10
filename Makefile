@@ -68,10 +68,18 @@ ifeq ($(USE_AVX2),1)
 
 endif
 
-#INC += -I../../gmp-install/wsl/6.1.2/include/
-#LIBS += -L../../gmp-install/wsl/6.1.2/lib/ -lm -lgmp
-INC += -I../../gmp_install/gmp-6.2.0/include/
-LIBS += -L../../gmp_install/gmp-6.2.0/lib/ -lm -lgmp
+ifeq ($(MINGW),1)
+INC += -I../../gmp-install/mingw/6.2.0/include/
+LIBS += -L../../gmp-install/mingw/6.2.0/lib/ -lm -lgmp
+else
+INC += -I../../gmp-install/wsl/6.1.2/include/
+LIBS += -L../../gmp-install/wsl/6.1.2/lib/ -lm -lgmp
+#INC += -I../../gmp_install/gmp-6.2.0/include/
+#LIBS += -L../../gmp_install/gmp-6.2.0/lib/ -lm -lgmp
+endif
+
+
+
 
 
 # ===================== feature options =========================
@@ -90,7 +98,8 @@ ifeq ($(STATIC),1)
 #	LIBS += -Wl,-Bstatic -lm -Wl,Bdynamic -pthread
   LIBS += -L/usr/lib/x86_64-redhat-linux6E/lib64/ -lpthread -lm -lytools
 else
-	LIBS += -lpthread -lytools -lm -ldl
+	LIBS += -lpthread -lytools -lm
+#	-ldl
 endif
 
 CFLAGS += $(OPT_FLAGS) $(WARN_FLAGS) $(INC)
