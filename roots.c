@@ -318,7 +318,7 @@ void compute_roots_work_fcn(void *vptr)
 
 #else
                 // slightly optimized modinv when prime >> prodN
-                inv = modinv_1c(t->sdata.prodN, prime);
+                inv = modinv3(t->sdata.prodN, prime);
                 t->sdata.root[i] = prime - inv;
 #endif
 
@@ -422,7 +422,7 @@ void compute_roots_work_fcn(void *vptr)
             {
                 // start the process with the first prime in this class
                 // by using modinv.
-                inv = modinv_1c(pn, prime);
+                inv = modinv3(pn, prime);
                 t->sdata.root[i] = prime - inv;
                 last_root[classnum] = inv;
                 last_p[classnum] = prime;
@@ -444,7 +444,7 @@ void compute_roots_work_fcn(void *vptr)
 #else
 
             // slightly optimized modinv when prime >> prodN
-            inv = modinv_1c(t->sdata.prodN, prime);
+            inv = modinv3(t->sdata.prodN, prime);
             t->sdata.root[i] = prime - inv;
 #endif
 
