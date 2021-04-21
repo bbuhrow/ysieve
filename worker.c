@@ -330,7 +330,7 @@ void *soe_worker_thread_main(void *thread_data) {
 					uint32_t prime = t->sdata.sieve_p[i];
 
                     // slightly optimized modinv when prime >> prodN
-                    inv = modinv_1c(t->sdata.prodN, prime);
+                    inv = modinv3(t->sdata.prodN, prime);
 					t->sdata.root[i] = prime - inv;
 
 					//t->sdata.lower_mod_prime[i - t->sdata.bucket_start_id] = 
@@ -350,7 +350,7 @@ void *soe_worker_thread_main(void *thread_data) {
 					uint32_t prime = t->sdata.sieve_p[i];
 
                     // slightly optimized modinv when prime >> prodN
-                    inv = modinv_1c(t->sdata.prodN, prime);
+                    inv = modinv3(t->sdata.prodN, prime);
 					t->sdata.root[i] = prime - inv;
 		
 					//t->sdata.lower_mod_prime[i - t->sdata.bucket_start_id] = 
