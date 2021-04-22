@@ -521,7 +521,7 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
 
 	if (highlimit > 4000000000000000000ULL)
 	{
-		printf("input too high\n");
+		printf("input too large\n");
 		return 1;
 	}
 
@@ -540,7 +540,7 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
 			exit(1);
 		}
 
-		// find the highest index that we'll need.  Much of the rest of the code is 
+		// find the largest index that we'll need.  Much of the rest of the code is 
 		// sensitive to this.  Note that this could be slow for large numbers of
 		// sieve primes... could replace with a binary search.
 		for (i=0; i<num_sp; i++)
@@ -554,8 +554,26 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
 		sdata->pboundi = i;	
 
 #ifdef USE_AVX2
-        // plus perhaps a few extra to get us to a convienient vector boundary
-        while (sdata->pboundi & 7) sdata->pboundi++;
+        // plus perhaps a few extra to get us to a convienient vector boundary.
+        // fixme: it's possible that this overflows the sieve primes provided,
+        // when the range ends near the square of the max sieve prime.
+        // fixed by manually adding some if necessary.  The things we add don't
+        // even have to be primes because we are already sieving with all of the
+        // primes required.  Just need to be non-zero and the buffer needs
+        // to be grown if necessary.
+        while (sdata->pboundi & 7)
+        {
+            if (sdata->pboundi == num_sp)
+            {
+                sdata->sieve_p = (uint32_t*)xrealloc(sdata->sieve_p, (num_sp + 8) * sizeof(uint32_t));
+                for (i = 0; i < 8; i++)
+                {
+                    sdata->sieve_p[num_sp + i] = sdata->sieve_p[num_sp - 1] + i;
+                }
+                sdata->num_sp = num_sp + 8;
+            }
+            sdata->pboundi++;
+        }
 #endif
 		
 		sdata->offset = NULL;

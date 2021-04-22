@@ -491,6 +491,8 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
 
 	if (VFLAG > 2)
 	{	
+        char strfeatures[80];
+
 		printf("finding requested range %" PRIu64 " to %" PRIu64 "\n",
             sdata->orig_llimit,sdata->orig_hlimit);
 		printf("sieving range %" PRIu64 " to %" PRIu64 "\n",
@@ -502,9 +504,73 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
         if (sdata->use_monty)
             printf("using Montgomery enabled offset computations\n");
 
+        strcpy(strfeatures, "");
+
+#if defined(USE_AVX2)
+#ifdef __INTEL_COMPILER
+        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
+#elif defined(__GNUC__)
+        if (__builtin_cpu_supports("avx2"))
+#else
+        if (0)
+#endif
+        {
+            sprintf(strfeatures, "AVX2");
+        }
+#endif
+
+#if defined(USE_BMI2)
+#ifdef __INTEL_COMPILER
+        if (_may_i_use_cpu_feature(_FEATURE_BMI))
+#elif defined(__GNUC__)
+        if (__builtin_cpu_supports("bmi2"))
+#else
+        if (0)
+#endif
+        {
+            if (strlen(strfeatures) > 0)
+            {
+                sprintf(strfeatures, "%s, BMI2", strfeatures);
+            }
+            else
+            {
+                sprintf(strfeatures, "BMI2");
+            }
+        }
+#endif
+
+#ifdef USE_AVX512F
+#ifdef __INTEL_COMPILER
+        if (_may_i_use_cpu_feature(_FEATURE_AVX512F))
+#elif defined(__GNUC__)
+        if (__builtin_cpu_supports("avx512f"))
+#else
+        if (0)
+#endif
+        {
+            if (strlen(strfeatures) > 0)
+            {
+                sprintf(strfeatures, "%s, AVX512", strfeatures);
+            }
+            else
+            {
+                sprintf(strfeatures, "AVX512");
+            }
+        }
+#endif
+
+        if (strlen(strfeatures) > 0)
+        {
+            printf("Using cpu features: %s\n", strfeatures);
+        }
+        else
+        {
+            printf("Using cpu features: x86-64\n");
+        }
+
 		printf("lines have %" PRIu64 " bytes and %" PRIu64 " flags\n",
             sdata->numlinebytes,sdata->numlinebytes * 8);
-		printf("lines broken into = %" PRIu64 " blocks of size %u\n",
+		printf("lines broken into %" PRIu64 " blocks of size %u\n",
             sdata->blocks, sdata->SOEBLOCKSIZE);
 		printf("blocks contain %u flags and span %" PRIu64 " integers\n", 
             sdata->FLAGSIZE, sdata->blk_r);
