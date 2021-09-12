@@ -20,12 +20,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-CC = gcc-7.3.0
+CC = gcc
 CFLAGS = -g
 WARN_FLAGS = -Wall # -Wconversion
 OPT_FLAGS = -O3
-INC = -I. -I../../ytools.git/trunk
-LIBS = -L../../ytools.git/trunk
+INC = -I. -I../ytools
+LIBS = -L../ytools
 BINNAME = ysieve
 OBJ_EXT = .o
 
@@ -35,11 +35,6 @@ ifeq ($(COMPILER),icc)
 	INC += -L/usr/lib/gcc/x86_64-redhat-linux/4.4.4
 	CFLAGS += -qopt-report=5
 endif
-
-ifeq ($(COMPILER),gcc)
-	CC = gcc
-endif
-
 
 # ===================== architecture options =========================
 # if this option is specified then compile *both* the sse2 and sse4.1 versions of the
@@ -74,8 +69,6 @@ LIBS += -L../../gmp-install/mingw/6.2.0/lib/ -lm -lgmp
 else
 INC += -I../../gmp-install/wsl/6.1.2/include/
 LIBS += -L../../gmp-install/wsl/6.1.2/lib/ -lm -lgmp
-#INC += -I../../gmp_install/gmp-6.2.0/include/
-#LIBS += -L../../gmp_install/gmp-6.2.0/lib/ -lm -lgmp
 endif
 
 
