@@ -138,7 +138,7 @@ void get_offsets(thread_soedata_t *thread_data)
             {
                 //printf("pbounds block %d = %u\n", block, i);
                 ddata->pbounds[block] = i;
-                if (block < (sdata->blocks - 1))
+                if (block < (sdata->blocks - 0))
                     block++;
                 ddata->lblk_b = ddata->ublk_b + prodN;
                 ddata->ublk_b += sdata->blk_r;

@@ -20,14 +20,31 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-CC = gcc-7.3.0
+CC = gcc
 CFLAGS = -g
 WARN_FLAGS = -Wall # -Wconversion
 OPT_FLAGS = -O3
-INC = -I. -I../../ytools.git/trunk
-LIBS = -L../../ytools.git/trunk
+INC = -I. -I../ytools
+LIBS = -L../ytools
 BINNAME = ysieve
 OBJ_EXT = .o
+
+# ===================== path options =============================
+
+# standard search directories for headers/libraries within ysieve.
+# These should normally not be modified.
+INC = -I. 
+LIBS = -L.
+
+# we require additional search directories for gmp and ytools.
+# By default, we look adjacent to the ysieve folder (i.e., ../ytools, etc.).  Change
+# these if your installation locations differ.
+INC += -I../ytools
+LIBS += -L../ytools
+
+INC += -I../gmp_install/gmp-6.2.0/include
+LIBS += -L../gmp_install/gmp-6.2.0/lib
+
 
 # ===================== compiler options =========================
 ifeq ($(COMPILER),icc)
@@ -68,19 +85,6 @@ ifeq ($(USE_AVX2),1)
 
 endif
 
-ifeq ($(MINGW),1)
-INC += -I../../gmp-install/mingw/6.2.0/include/
-LIBS += -L../../gmp-install/mingw/6.2.0/lib/ -lm -lgmp
-else
-INC += -I../../gmp-install/wsl/6.1.2/include/
-LIBS += -L../../gmp-install/wsl/6.1.2/lib/ -lm -lgmp
-#INC += -I../../gmp_install/gmp-6.2.0/include/
-#LIBS += -L../../gmp_install/gmp-6.2.0/lib/ -lm -lgmp
-endif
-
-
-
-
 
 # ===================== feature options =========================
 ifeq ($(PROFILE),1)
@@ -96,9 +100,9 @@ ifeq ($(STATIC),1)
 # https://software.intel.com/en-us/articles/error-ld-cannot-find-lm
 	CFLAGS += -static-intel -static
 #	LIBS += -Wl,-Bstatic -lm -Wl,Bdynamic -pthread
-  LIBS += -L/usr/lib/x86_64-redhat-linux6E/lib64/ -lpthread -lm -lytools
+  LIBS += -L/usr/lib/x86_64-redhat-linux6E/lib64/  -lgmp -lpthread -lm -lytools
 else
-	LIBS += -lpthread -lytools -lm
+	LIBS +=  -lm -lgmp -lpthread -lytools
 #	-ldl
 endif
 
