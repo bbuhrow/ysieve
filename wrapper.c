@@ -107,6 +107,7 @@ soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
 void soe_finalize(soe_staticdata_t* sdata)
 {
     free(sdata->sieve_p);
+	free(sdata);
     return;
 }
 

@@ -324,13 +324,7 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
         sieve_line_ptr = &sieve_line_avx512_32k;
 #elif defined(USE_AVX2)
 
-#ifdef __INTEL_COMPILER
-        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
-#elif defined(__GNUC__)
-        if (__builtin_cpu_supports("avx2"))
-#else
-        if (0)
-#endif
+        if (sdata->has_avx2)
         {
             sieve_line_ptr = &sieve_line_avx2_32k;
         }
@@ -345,24 +339,12 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
         sdata->BUCKETSTARTI = 123040;
 #ifdef USE_AVX512F
 
-#ifdef __INTEL_COMPILER
-        if (_may_i_use_cpu_feature(_FEATURE_AVX512F))
-#elif defined(__GNUC__)
-        if (__builtin_cpu_supports("avx512f"))
-#else
-        if (0)
-#endif
+        if (sdata->has_avx512f)
         {
             sieve_line_ptr = &sieve_line_avx512_128k;
         }
 #elif defined(USE_AVX2)
-#ifdef __INTEL_COMPILER
-        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
-#elif defined(__GNUC__)
-        if (__builtin_cpu_supports("avx2"))
-#else
-        if (0)
-#endif
+        if (sdata->has_avx2)
         {
             sieve_line_ptr = &sieve_line_avx2_128k;
         }
@@ -371,13 +353,7 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
     case 262144:
 #ifdef USE_AVX512F
 
-#ifdef __INTEL_COMPILER
-        if (_may_i_use_cpu_feature(_FEATURE_AVX512F))
-#elif defined(__GNUC__)
-        if (__builtin_cpu_supports("avx512f"))
-#else
-        if (0)
-#endif
+        if (sdata->has_avx512f)
         {
             sieve_line_ptr = &sieve_line_avx512_256k;
         }
@@ -391,13 +367,7 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
     case 524288:
 #ifdef USE_AVX512F
 
-#ifdef __INTEL_COMPILER
-        if (_may_i_use_cpu_feature(_FEATURE_AVX512F))
-#elif defined(__GNUC__)
-        if (__builtin_cpu_supports("avx512f"))
-#else
-        if (0)
-#endif
+        if (sdata->has_avx512f)
         {
             sieve_line_ptr = &sieve_line_avx512_512k;
         }
@@ -438,13 +408,8 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
             startprime = 4;
         }
 #if defined(USE_AVX2)
-#ifdef __INTEL_COMPILER
-        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
-#elif defined(__GNUC__)
-        if (__builtin_cpu_supports("avx2"))
-#else
-        if (0)
-#endif
+
+        if (sdata->has_avx2)
         {
             sdata->use_monty = 1;
         }
@@ -456,13 +421,8 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
         prodN = 210;
         startprime = 4;
 #if defined(USE_AVX2)
-#ifdef __INTEL_COMPILER
-        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
-#elif defined(__GNUC__)
-        if (__builtin_cpu_supports("avx2"))
-#else
-        if (0)
-#endif
+
+        if (sdata->has_avx2)
         {
             sdata->use_monty = 1;
         }
@@ -474,13 +434,8 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
 		prodN=30;
 		startprime=3;
 #if defined(USE_AVX2)
-#ifdef __INTEL_COMPILER
-        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
-#elif defined(__GNUC__)
-        if (__builtin_cpu_supports("avx2"))
-#else
-        if (0)
-#endif
+
+        if (sdata->has_avx2)
         {
             sdata->use_monty = 1;
         }
@@ -625,7 +580,6 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
     uint64_t highlimit = sdata->orig_hlimit;
     uint64_t numbytes, numlinebytes;
 
-
     // some groupings of residue classes and blocks per thread
     // 240 = 48 * 5
     // 240 = 8 * 30
@@ -759,6 +713,10 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
                 sdata->bitmap_start_id = sdata->pboundi;
         }
 
+        // force no bitmap sieving...
+        sdata->bitmap_start_id = sdata->pboundi;
+        sdata->num_bitmap_primes = 0;
+
         // buckets operate up to the bitmap bound (which may be the 
         // equal to the sieve bound, if not benficial).
         sdata->num_bucket_primes = sdata->bitmap_start_id - sdata->bucket_start_id;
@@ -773,8 +731,10 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
     sdata->large_bucket_start_prime = sdata->blocks * sdata->FLAGSIZE;
 
     // allocate space for the root of each sieve prime (used by the bucket sieve)
-    sdata->root = (int *)xmalloc_align(sdata->bitmap_start_id * sizeof(int));
-    allocated_bytes += sdata->bitmap_start_id * sizeof(uint32_t);
+    //sdata->root = (int *)xmalloc_align(sdata->bitmap_start_id * sizeof(int));
+    //allocated_bytes += sdata->bitmap_start_id * sizeof(uint32_t);
+    sdata->root = (int*)xmalloc_align(sdata->pboundi * sizeof(int));
+    allocated_bytes += sdata->pboundi * sizeof(uint32_t);
     if (sdata->root == NULL)
     {
         printf("error allocating roots\n");
@@ -789,8 +749,10 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
         }
     }
 
-    sdata->r2modp = (uint32_t *)xmalloc_align(sdata->bitmap_start_id * sizeof(uint32_t));
-    allocated_bytes += sdata->bitmap_start_id * sizeof(uint32_t);
+    //sdata->r2modp = (uint32_t *)xmalloc_align(sdata->bitmap_start_id * sizeof(uint32_t));
+    //allocated_bytes += sdata->bitmap_start_id * sizeof(uint32_t);
+    sdata->r2modp = (uint32_t *)xmalloc_align(sdata->pboundi * sizeof(uint32_t));
+    allocated_bytes += sdata->pboundi * sizeof(uint32_t);
     if (sdata->r2modp == NULL)
     {
         printf("error allocating r2modp\n");
@@ -806,8 +768,10 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
     }
 
     // experimental montgomery arithmetic
-    sdata->pinv = (uint32_t *)xmalloc_align(sdata->bitmap_start_id * sizeof(uint32_t));
-    allocated_bytes += sdata->bitmap_start_id * sizeof(uint32_t);
+    //sdata->pinv = (uint32_t *)xmalloc_align(sdata->bitmap_start_id * sizeof(uint32_t));
+    //allocated_bytes += sdata->bitmap_start_id * sizeof(uint32_t);
+    sdata->pinv = (uint32_t *)xmalloc_align(sdata->pboundi * sizeof(uint32_t));
+    allocated_bytes += sdata->pboundi * sizeof(uint32_t);
     if (sdata->pinv == NULL)
     {
         printf("error allocating pinv\n");
@@ -824,8 +788,10 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
 
 
     // these are used by the bucket sieve
-    sdata->lower_mod_prime = (uint32_t *)xmalloc_align(sdata->bitmap_start_id * sizeof(uint32_t));
-    allocated_bytes += sdata->bitmap_start_id * sizeof(uint32_t);
+    //sdata->lower_mod_prime = (uint32_t *)xmalloc_align(sdata->bitmap_start_id * sizeof(uint32_t));
+    //allocated_bytes += sdata->bitmap_start_id * sizeof(uint32_t);
+    sdata->lower_mod_prime = (uint32_t *)xmalloc_align(sdata->pboundi * sizeof(uint32_t));
+    allocated_bytes += sdata->pboundi * sizeof(uint32_t);
     if (sdata->lower_mod_prime == NULL)
     {
         printf("error allocating lower mod prime\n");
@@ -944,14 +910,10 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
 
 #endif
 
+
+
 #if defined(USE_BMI2) || defined(USE_AVX512F)
-#ifdef __INTEL_COMPILER
-    if (_may_i_use_cpu_feature(_FEATURE_BMI))
-#elif defined(__GNUC__)
-    if (__builtin_cpu_supports("bmi2"))
-#else
-    if (0)
-#endif
+    if (sdata->has_bmi2)
     {
         compute_8_bytes_ptr = &compute_8_bytes_bmi2;
     }
@@ -964,13 +926,7 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
 #endif
 
 #if defined(USE_AVX2)
-#ifdef __INTEL_COMPILER
-    if (_may_i_use_cpu_feature(_FEATURE_AVX2))
-#elif defined(__GNUC__)
-    if (__builtin_cpu_supports("avx2"))
-#else
-    if (0)
-#endif
+    if (sdata->has_avx2)
     {
         pre_sieve_ptr = &pre_sieve_avx2;
     }
@@ -1083,7 +1039,7 @@ uint64_t alloc_threaddata(soe_staticdata_t *sdata, thread_soedata_t *thread_data
 		// we'll need to store the offset into the next block for each prime.
 		// actually only need those primes less than BUCKETSTARTP since bucket sieving
 		// doesn't use the offset array.
-		j = MIN(sdata->pboundi, sdata->BUCKETSTARTI);
+        j = MIN(sdata->pboundi, sdata->BUCKETSTARTI);
         thread->ddata.offsets = (uint32_t *)xmalloc_align(j * sizeof(uint32_t));
 		allocated_bytes += j * sizeof(uint32_t);
 		if (thread->ddata.offsets == NULL)

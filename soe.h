@@ -137,6 +137,10 @@ typedef struct
     uint32_t FLAGSIZEm1;
     uint32_t FLAGBITS;
     uint32_t BUCKETSTARTI;
+	int has_avx2;
+	int has_bmi2;
+	int has_bmi1;
+	int has_avx512f;
 
 } soe_staticdata_t;
 

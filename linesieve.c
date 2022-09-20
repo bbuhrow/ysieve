@@ -298,9 +298,9 @@ void sieve_line(thread_soedata_t *thread_data)
             ddata->offsets[j] = (uint32_t)(k - FLAGSIZE);
         }
 
+		// finally, fill any primes in this block's bucket
 		if (ddata->bucket_depth > 0)
-		{
-			// finally, fill any primes in this block's bucket
+		{		
 			bptr = ddata->sieve_buckets[i];	
 			buckets = ddata->sieve_buckets;
 			nptr = ddata->bucket_hits;            
@@ -411,6 +411,57 @@ void sieve_line(thread_soedata_t *thread_data)
 		}
 
 		flagblock += SOEBLOCKSIZE;
+	}
+
+	// experiment: for big primes above some bound, sieve the entire line at once
+	if (0)
+	{
+		uint64_t LINESIZE = 262144 * sdata->blocks;
+		uint32_t* lmp = sdata->lower_mod_prime;
+		uint32_t diff = sdata->rclass[thread_data->current_line] - 1;
+
+		for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
+		{
+			prime = sdata->sieve_p[j];
+
+			int s = sdata->root[j];
+
+			// the lower block bound (lblk_b) times s can exceed 64 bits for large ranges,
+			// so reduce mod p here as well.
+			uint64_t tmp2 = (uint64_t)s * (uint64_t)(lmp[j] + diff);
+
+			// tmp2 = (uint64_t)s * (uint64_t)(lmp[i] + diff);
+			ddata->offsets[j] = (uint32_t)(tmp2 % (uint64_t)prime);
+		}
+
+		flagblock = line;
+		for (i = 0; i < sdata->blocks - 8; i += 8)
+		{
+			for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
+			{
+				prime = sdata->sieve_p[j];
+
+				for (k = ddata->offsets[j]; k < 2097152; k += prime)
+				{
+					flagblock[k >> 3] &= masks[k & 7];
+				}
+				ddata->offsets[j] = k - 2097152;
+			}
+			flagblock += 262144;
+		}
+		for (; i < sdata->blocks; i++)
+		{
+			for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
+			{
+				prime = sdata->sieve_p[j];
+
+				for (k = ddata->offsets[j]; k < 262144; k += prime)
+				{
+					flagblock[k >> 3] &= masks[k & 7];
+				}
+			}
+			flagblock += 262144;
+		}
 	}
 
 	return;
@@ -2518,6 +2569,58 @@ void sieve_line_avx2_32k(thread_soedata_t *thread_data)
 		}
 
 		flagblock += 32768;
+	}
+
+	// experiment: for big primes above some bound, sieve the entire line at once
+	if (0)
+	{
+		uint64_t LINESIZE = 262144 * sdata->blocks;
+		uint32_t* lmp = sdata->lower_mod_prime;
+		uint32_t diff = sdata->rclass[thread_data->current_line] - 1;
+
+		for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
+		{
+			prime = sdata->sieve_p[j];
+
+			int s = sdata->root[j];
+
+			// the lower block bound (lblk_b) times s can exceed 64 bits for large ranges,
+			// so reduce mod p here as well.
+			uint64_t tmp2 = (uint64_t)s * (uint64_t)(lmp[j] + diff);
+
+			// tmp2 = (uint64_t)s * (uint64_t)(lmp[i] + diff);
+			ddata->offsets[j] = (uint32_t)(tmp2 % (uint64_t)prime);
+		}
+
+		flagblock = line;
+		for (i = 0; i < sdata->blocks - 8; i += 8)
+		{
+			for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
+			{
+				prime = sdata->sieve_p[j];
+
+				for (k = ddata->offsets[j]; k < 2097152; k += prime)
+				{
+					flagblock[k >> 3] &= masks[k & 7];
+				}
+				ddata->offsets[j] = k - 2097152;
+			}
+			flagblock += 262144;
+		}
+		for (; i < sdata->blocks; i++)
+		{
+			for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
+			{
+				prime = sdata->sieve_p[j];
+
+				for (k = ddata->offsets[j]; k < 262144; k += prime)
+				{
+					flagblock[k >> 3] &= masks[k & 7];
+				}
+				ddata->offsets[j] = k - 262144;
+			}
+			flagblock += 32768;
+		}
 	}
 
 	return;

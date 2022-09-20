@@ -257,9 +257,6 @@ void bitmap_8class_work_fcn(void *vptr)
 
     int *res_table = udata->res_table;
     int *res_steps = udata->res_steps;
-    uint32_t **res_nearest = udata->res_nearest;
-    uint32_t **res_nearest_class = udata->res_nearest_class;
-    int **res_classtab = udata->res_classtab;
 
     uint64_t llimit = sdata->lowlimit + (uint64_t)t->startid * (uint64_t)sdata->prodN * sdata->FLAGSIZE;
     uint64_t hlimit = sdata->lowlimit + (uint64_t)t->stopid * (uint64_t)sdata->prodN * sdata->FLAGSIZE;
@@ -283,6 +280,7 @@ void bitmap_8class_work_fcn(void *vptr)
         int bclass;                 // residue class of current bit
         int bclassnum;              // column in residue_pattern_mod30 of bclass
 
+        // once prime exceeds the interval size we can use faster methods.
         if (prime > interval)
             break;
 
@@ -290,8 +288,8 @@ void bitmap_8class_work_fcn(void *vptr)
         bloc = prime - llimit % prime;
 
         // get it on a residue class
-        bclassnum = res_nearest_class[pclass][bloc % 30];
-        bloc = bloc + (uint64_t)res_nearest[pclass][bloc % 30] * (uint64_t)prime;
+        bclassnum = udata->res_nearest_class[pclass][bloc % 30];
+        bloc = bloc + (uint64_t)udata->res_nearest[pclass][bloc % 30] * (uint64_t)prime;
         bclass = bloc % 30;
 
         // sieve the entire space, jumping around residue classes
@@ -312,7 +310,7 @@ void bitmap_8class_work_fcn(void *vptr)
             bclassnum++;
             bclassnum &= 7;
 
-            bclass = res_classtab[pclass][bclassnum];
+            bclass = udata->res_classtab[pclass][bclassnum];
         }
     }
 
@@ -330,7 +328,7 @@ void bitmap_8class_work_fcn(void *vptr)
 
         // get it on a residue class
         //bclassnum = res_nearest_class[pclass][bloc % 30];
-        bloc = bloc + (uint64_t)res_nearest[pclass][bloc % 30] * (uint64_t)prime;
+        bloc = bloc + (uint64_t)udata->res_nearest[pclass][bloc % 30] * (uint64_t)prime;
         bclass = bloc % 30;
 
         if (bloc < interval)
@@ -453,6 +451,7 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
     uint32_t num_sp = sdata->num_sp;
     int VFLAG = sdata->VFLAG;
     int THREADS = sdata->THREADS;
+    info_t info;
 
 	//thread data holds all data needed during sieving
 	thread_soedata_t *thread_data;		//an array of thread data objects
@@ -464,6 +463,13 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
     {
         gettimeofday(&tstart, NULL);
     }
+
+    ytools_get_computer_info(&info, 0);
+    sdata->has_avx2 = info.AVX2;
+    sdata->has_avx512f = info.AVX512F;
+    sdata->has_bmi1 = info.BMI1;
+    sdata->has_bmi2 = info.BMI2;
+
 
 	// sanity check the input
 	if (check_input(*highlimit, lowlimit, num_sp, sieve_p, sdata, *offset))
@@ -507,26 +513,14 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
         strcpy(strfeatures, "");
 
 #if defined(USE_AVX2)
-#ifdef __INTEL_COMPILER
-        if (_may_i_use_cpu_feature(_FEATURE_AVX2))
-#elif defined(__GNUC__)
-        if (__builtin_cpu_supports("avx2"))
-#else
-        if (0)
-#endif
+        if (sdata->has_avx2)
         {
             sprintf(strfeatures, "AVX2");
         }
 #endif
 
 #if defined(USE_BMI2)
-#ifdef __INTEL_COMPILER
-        if (_may_i_use_cpu_feature(_FEATURE_BMI))
-#elif defined(__GNUC__)
-        if (__builtin_cpu_supports("bmi2"))
-#else
-        if (0)
-#endif
+        if (sdata->has_bmi2)
         {
             if (strlen(strfeatures) > 0)
             {
@@ -540,13 +534,7 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
 #endif
 
 #ifdef USE_AVX512F
-#ifdef __INTEL_COMPILER
-        if (_may_i_use_cpu_feature(_FEATURE_AVX512F))
-#elif defined(__GNUC__)
-        if (__builtin_cpu_supports("avx512f"))
-#else
-        if (0)
-#endif
+        if (sdata->has_avx512f)
         {
             if (strlen(strfeatures) > 0)
             {
@@ -719,6 +707,16 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
 				}
 				printf("\n");
 			}
+            printf("res_nearest_class: ");
+            for (i = 0; i < sdata->numclasses; i++)
+            {
+                int j;
+                for (j = 0; j < sdata->prodN; j++)
+                {
+                    printf("%d ", res_nearest_class[i][j]);
+                }
+                printf("\n");
+            }
 		}
 
         memset(line, 255, linesize * sdata->numclasses / 8);
@@ -747,9 +745,44 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
 
         udata.sdata = sdata;
         udata.ddata = thread_data;
-        udata.res_classtab = res_classtab;
-        udata.res_nearest = res_nearest;
-        udata.res_nearest_class = res_nearest_class;
+        
+        udata.res_classtab = (int**)malloc(sdata->numclasses * sizeof(int*));
+        for (i = 0; i < sdata->numclasses; i++)
+        {
+            int j;
+            udata.res_classtab[i] = (int*)malloc(sdata->numclasses * sizeof(int));
+            udata.res_classtab[i][0] = sdata->rclass[i];
+            for (j = 1; j < sdata->numclasses; j++)
+                udata.res_classtab[i][j] = (udata.res_classtab[i][j - 1] +
+                    sdata->rclass[i] * res_steps[j - 1]) % sdata->prodN;
+        }
+
+        udata.res_nearest = (uint32_t**)malloc(sdata->numclasses * sizeof(uint32_t*));
+        udata.res_nearest_class = (uint32_t**)malloc(sdata->numclasses * sizeof(uint32_t*));
+        for (i = 0; i < sdata->numclasses; i++)
+        {
+            int j;
+            udata.res_nearest[i] = (uint32_t*)malloc(sdata->prodN * sizeof(uint32_t));
+            udata.res_nearest_class[i] = (uint32_t*)malloc(sdata->prodN * sizeof(uint32_t));
+
+            for (j = 0; j < sdata->prodN; j++)
+            {
+                int k;
+                uint32_t x = j;
+                udata.res_nearest[i][j] = 0;
+                while (res_table[x] < 0)
+                {
+                    udata.res_nearest[i][j]++;
+                    x += sdata->rclass[i];
+                    if (x >= sdata->prodN) x -= sdata->prodN;
+                }
+
+                for (k = 0; k < sdata->numclasses; k++)
+                    if (udata.res_classtab[i][k] == x)
+                        udata.res_nearest_class[i][j] = k;
+            }
+        }
+
         udata.res_steps = res_steps;
         udata.res_table = res_table;
 
@@ -1045,6 +1078,7 @@ void finalize_sieve(soe_staticdata_t *sdata,
     }
 
     align_free(sdata->r2modp);
+    align_free(sdata->pinv);
     align_free(sdata->root);
     align_free(sdata->lower_mod_prime);
 	free(thread_data);

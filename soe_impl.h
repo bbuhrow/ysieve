@@ -97,13 +97,15 @@ __inline uint64_t _lead_zcnt64(uint64_t x)
 #endif
 #elif defined(_MSC_VER)
 #include <intrin.h>
-#ifdef USE_BMI2
-#define _lead_zcnt64 __lzcnt64
-#define _trail_zcnt _tzcnt_u32
-#define _trail_zcnt64 _tzcnt_u64
-#define _reset_lsb(x) ((x) &= ((x) - 1))
-#define _reset_lsb64(x) ((x) &= ((x) - 1))
-#else
+
+//#ifdef USE_BMI2
+//#define _lead_zcnt64 __lzcnt64
+//#define _trail_zcnt _tzcnt_u32
+//#define _trail_zcnt64 _tzcnt_u64
+//#define _reset_lsb(x) ((x) &= ((x) - 1))
+//#define _reset_lsb64(x) ((x) &= ((x) - 1))
+//#else
+
 __inline uint32_t _trail_zcnt(uint32_t x)
 {
     uint32_t pos;
@@ -130,7 +132,7 @@ __inline uint64_t _lead_zcnt64(uint64_t x)
 }
 #define _reset_lsb(x) ((x) &= ((x) - 1))
 #define _reset_lsb64(x) ((x) &= ((x) - 1))
-#endif
+//#endif
 
 #else
 

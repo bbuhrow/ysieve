@@ -551,6 +551,7 @@ void getRoots(soe_staticdata_t *sdata, thread_soedata_t *thread_data)
     }
 
     range = (sdata->bitmap_start_id - sdata->bucket_start_id) / sdata->THREADS;
+    //range = (sdata->pboundi - sdata->bucket_start_id) / sdata->THREADS;
     lastid = sdata->bucket_start_id;
 
     if (range > 0)
@@ -578,6 +579,7 @@ void getRoots(soe_staticdata_t *sdata, thread_soedata_t *thread_data)
         if (thread_data[sdata->THREADS - 1].stopid != sdata->bitmap_start_id)
         {
             thread_data[sdata->THREADS - 1].stopid = sdata->bitmap_start_id;
+            //thread_data[sdata->THREADS - 1].stopid = sdata->pboundi;
         }
 
         udata.sdata = sdata;

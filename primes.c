@@ -81,13 +81,7 @@ void compute_primes_work_fcn(void *vptr)
     }
 
 #if defined(USE_BMI2) || defined(USE_AVX512F)
-#ifdef __INTEL_COMPILER
-    if (_may_i_use_cpu_feature(_FEATURE_BMI))
-#elif defined(__GNUC__)
-    if (__builtin_cpu_supports("bmi2"))
-#else
-    if (0)
-#endif
+    if (sdata->has_bmi2)
     {
         for (i = t->startid; i < t->stopid; i += 8)
         {

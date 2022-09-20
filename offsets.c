@@ -138,7 +138,10 @@ void get_offsets(thread_soedata_t *thread_data)
             {
                 //printf("pbounds block %d = %u\n", block, i);
                 ddata->pbounds[block] = i;
-                if (block < (sdata->blocks - 0))
+
+                // if (block < (sdata->blocks - 0)) // <-- sometimes crashes, but correct ranges
+                // if (block < (sdata->blocks - 1)) // <-- no crashes, but incorrect ranges
+                if (block < (sdata->blocks - 1))
                     block++;
                 ddata->lblk_b = ddata->ublk_b + prodN;
                 ddata->ublk_b += sdata->blk_r;
@@ -201,11 +204,11 @@ void get_offsets(thread_soedata_t *thread_data)
 
     if (ddata->bucket_depth > 0)
     {
-        uint64_t **bptr;
+        uint64_t** bptr;
 
-        uint32_t *nptr;
+        uint32_t* nptr;
         uint32_t linesize = FLAGSIZE * sdata->blocks;
-        uint32_t *lmp = sdata->lower_mod_prime;// -sdata->bucket_start_id;
+        uint32_t* lmp = sdata->lower_mod_prime;// -sdata->bucket_start_id;
 
         nptr = ddata->bucket_hits;
         bptr = ddata->sieve_buckets;
@@ -218,11 +221,11 @@ void get_offsets(thread_soedata_t *thread_data)
             // sieve prime array is at an index divisible by 8.
             for (; i < sdata->bitmap_start_id; i += 8)
             {
-                __m256i vp = _mm256_loadu_si256((__m256i *)(&sdata->sieve_p[i]));
-                __m256i vpinv = _mm256_loadu_si256((__m256i *)(&sdata->pinv[i]));
-                __m256i vr2 = _mm256_loadu_si256((__m256i *)(&sdata->r2modp[i]));
-                __m256i vr = _mm256_loadu_si256((__m256i *)(&sdata->root[i]));
-                __m256i vlmp = _mm256_loadu_si256((__m256i *)(&lmp[i]));
+                __m256i vp = _mm256_loadu_si256((__m256i*)(&sdata->sieve_p[i]));
+                __m256i vpinv = _mm256_loadu_si256((__m256i*)(&sdata->pinv[i]));
+                __m256i vr2 = _mm256_loadu_si256((__m256i*)(&sdata->r2modp[i]));
+                __m256i vr = _mm256_loadu_si256((__m256i*)(&sdata->root[i]));
+                __m256i vlmp = _mm256_loadu_si256((__m256i*)(&lmp[i]));
                 __m256i vdiff = _mm256_set1_epi32(diff);
                 __m256i t1, t2, t3;
                 __m256i even, odd;
@@ -266,8 +269,8 @@ void get_offsets(thread_soedata_t *thread_data)
                 t2 = _mm256_blend_epi32(_mm256_shuffle_epi32(vp, 0xB1), vr, 0x55);
                 t3 = _mm256_blend_epi32(vp, _mm256_shuffle_epi32(vr, 0xB1), 0x55);
 
-                _mm256_store_si256((__m256i *)tmp, t2);         // even (prime | root)
-                _mm256_store_si256((__m256i *)(&tmp[4]), t3);   // odd  (prime | root)
+                _mm256_store_si256((__m256i*)tmp, t2);         // even (prime | root)
+                _mm256_store_si256((__m256i*)(&tmp[4]), t3);   // odd  (prime | root)
 
                 // bucket sort the roots
                 root = (uint32_t)tmp[0];
@@ -447,7 +450,7 @@ void get_offsets(thread_soedata_t *thread_data)
 
         if ((i < sdata->bitmap_start_id) && (ddata->largep_offset == 0))
         {
-            uint32_t *lmp = sdata->lower_mod_prime;// -sdata->bucket_start_id;
+            uint32_t* lmp = sdata->lower_mod_prime;// -sdata->bucket_start_id;
             prime = sdata->sieve_p[i];
 
             s = sdata->root[i];
@@ -475,9 +478,9 @@ void get_offsets(thread_soedata_t *thread_data)
             // primes greater than the entire sieve interval, thus they
             // at most hit one block and we don't need to save the prime
             // itself since it doesn't need to be advanced.
-            uint32_t **large_bptr;
-            uint32_t *large_nptr;
-            uint32_t *lmp = sdata->lower_mod_prime;// -sdata->bucket_start_id;
+            uint32_t** large_bptr;
+            uint32_t* large_nptr;
+            uint32_t* lmp = sdata->lower_mod_prime;// -sdata->bucket_start_id;
 
             large_nptr = ddata->large_bucket_hits;
             large_bptr = ddata->large_sieve_buckets;
@@ -490,17 +493,17 @@ void get_offsets(thread_soedata_t *thread_data)
 
 #if defined(USE_AVX2)
 
-            if (sdata->use_monty)
+            if ((sdata->has_avx2) && (sdata->use_monty))
             {
                 // AVX2 (in soe_util.c) has arranged things so that the end of the
                 // sieve prime array is at an index divisible by 8.
-                for (i = ddata->largep_offset; i<sdata->bitmap_start_id; i+=8)
+                for (i = ddata->largep_offset; i < sdata->bitmap_start_id; i += 8)
                 {
-                    __m256i vp = _mm256_loadu_si256((__m256i *)(&sdata->sieve_p[i]));
-                    __m256i vpinv = _mm256_loadu_si256((__m256i *)(&sdata->pinv[i]));
-                    __m256i vr2 = _mm256_loadu_si256((__m256i *)(&sdata->r2modp[i]));
-                    __m256i vr = _mm256_loadu_si256((__m256i *)(&sdata->root[i]));
-                    __m256i vlmp = _mm256_loadu_si256((__m256i *)(&lmp[i]));
+                    __m256i vp = _mm256_loadu_si256((__m256i*)(&sdata->sieve_p[i]));
+                    __m256i vpinv = _mm256_loadu_si256((__m256i*)(&sdata->pinv[i]));
+                    __m256i vr2 = _mm256_loadu_si256((__m256i*)(&sdata->r2modp[i]));
+                    __m256i vr = _mm256_loadu_si256((__m256i*)(&sdata->root[i]));
+                    __m256i vlmp = _mm256_loadu_si256((__m256i*)(&lmp[i]));
                     __m256i vdiff = _mm256_set1_epi32(diff);
                     __m256i t1, t2, t3;
                     __m256i even, odd;
@@ -530,62 +533,62 @@ void get_offsets(thread_soedata_t *thread_data)
                     t1 = _mm256_cmpge_epu32(vr, t1);
                     mask = ~(_mm256_movemask_epi8(t1));
 
-                    _mm256_storeu_si256((__m256i *)tmp, vr);
+                    _mm256_storeu_si256((__m256i*)tmp, vr);
 
                     if (mask & 0x1)
                     {
                         bnum = (tmp[0] >> FLAGBITS);
                         large_bptr[bnum][large_nptr[bnum]] = tmp[0];
-                        large_nptr[bnum]++;	
+                        large_nptr[bnum]++;
                     }
 
                     if (mask & 0x10)
                     {
                         bnum = (tmp[1] >> FLAGBITS);
                         large_bptr[bnum][large_nptr[bnum]] = tmp[1];
-                        large_nptr[bnum]++;	
+                        large_nptr[bnum]++;
                     }
 
                     if (mask & 0x100)
                     {
                         bnum = (tmp[2] >> FLAGBITS);
                         large_bptr[bnum][large_nptr[bnum]] = tmp[2];
-                        large_nptr[bnum]++;	
+                        large_nptr[bnum]++;
                     }
 
                     if (mask & 0x1000)
                     {
                         bnum = (tmp[3] >> FLAGBITS);
                         large_bptr[bnum][large_nptr[bnum]] = tmp[3];
-                        large_nptr[bnum]++;	
+                        large_nptr[bnum]++;
                     }
 
                     if (mask & 0x10000)
                     {
                         bnum = (tmp[4] >> FLAGBITS);
                         large_bptr[bnum][large_nptr[bnum]] = tmp[4];
-                        large_nptr[bnum]++;	
+                        large_nptr[bnum]++;
                     }
 
                     if (mask & 0x100000)
                     {
                         bnum = (tmp[5] >> FLAGBITS);
                         large_bptr[bnum][large_nptr[bnum]] = tmp[5];
-                        large_nptr[bnum]++;	
+                        large_nptr[bnum]++;
                     }
 
                     if (mask & 0x1000000)
                     {
                         bnum = (tmp[6] >> FLAGBITS);
                         large_bptr[bnum][large_nptr[bnum]] = tmp[6];
-                        large_nptr[bnum]++;	
+                        large_nptr[bnum]++;
                     }
 
                     if (mask & 0x10000000)
                     {
                         bnum = (tmp[7] >> FLAGBITS);
                         large_bptr[bnum][large_nptr[bnum]] = tmp[7];
-                        large_nptr[bnum]++;	
+                        large_nptr[bnum]++;
                     }
                 }
             }
@@ -593,7 +596,7 @@ void get_offsets(thread_soedata_t *thread_data)
             {
                 // AVX2 (in soe_util.c) has arranged things so that the end of the
                 // sieve prime array is at an index divisible by 8.
-                for (i = ddata->largep_offset; i<sdata->bitmap_start_id; i+=2)
+                for (i = ddata->largep_offset; i < sdata->bitmap_start_id; i += 2)
                 {
                     uint64_t tmp3;
                     uint32_t p2, r2;
@@ -636,45 +639,45 @@ void get_offsets(thread_soedata_t *thread_data)
 
 #else
 
-			for (i = ddata->largep_offset; i<sdata->bitmap_start_id-1; i+=2)
-			{
-				uint64_t tmp3;
-				uint32_t p2, r2;
-				int s2;
-							
-				prime = sdata->sieve_p[i];
-				p2 = sdata->sieve_p[i+1];
+            for (i = ddata->largep_offset; i < sdata->bitmap_start_id - 1; i += 2)
+            {
+                uint64_t tmp3;
+                uint32_t p2, r2;
+                int s2;
 
-				s = sdata->root[i];
-				s2 = sdata->root[i+1];
-				
-				// we solved for lower_mod_prime while computing the modular inverse of
-				// each prime, for the residue class 1.  add the difference between this
-				// residue class and 1 before multiplying by the modular inverse.
+                prime = sdata->sieve_p[i];
+                p2 = sdata->sieve_p[i + 1];
+
+                s = sdata->root[i];
+                s2 = sdata->root[i + 1];
+
+                // we solved for lower_mod_prime while computing the modular inverse of
+                // each prime, for the residue class 1.  add the difference between this
+                // residue class and 1 before multiplying by the modular inverse.
                 // could use (_mm256_mul_epu32 --> VPMULUDQ)
-				tmp2 = (uint64_t)s * (uint64_t)(lmp[i] + diff);
-				tmp3 = (uint64_t)s2 * (uint64_t)(lmp[i + 1] + diff);
+                tmp2 = (uint64_t)s * (uint64_t)(lmp[i] + diff);
+                tmp3 = (uint64_t)s2 * (uint64_t)(lmp[i + 1] + diff);
 
                 // would need custom solution
-				root = (uint32_t)(tmp2 % (uint64_t)prime);
-				r2 = (uint32_t)(tmp3 % (uint64_t)p2);
+                root = (uint32_t)(tmp2 % (uint64_t)prime);
+                r2 = (uint32_t)(tmp3 % (uint64_t)p2);
 
                 // gather may help, but writes would need to be done 1 by 1.
-				if (root < linesize)			
-				{	
-					bnum = (root >> FLAGBITS);
-					large_bptr[bnum][large_nptr[bnum]] = root;
-					large_nptr[bnum]++;	
-				}	
+                if (root < linesize)
+                {
+                    bnum = (root >> FLAGBITS);
+                    large_bptr[bnum][large_nptr[bnum]] = root;
+                    large_nptr[bnum]++;
+                }
 
-				if (r2 < linesize)			
-				{		
-					bnum = (r2 >> FLAGBITS);
-					large_bptr[bnum][large_nptr[bnum]] = r2;
-					large_nptr[bnum]++;	
-				}	
-				
-			}
+                if (r2 < linesize)
+                {
+                    bnum = (r2 >> FLAGBITS);
+                    large_bptr[bnum][large_nptr[bnum]] = r2;
+                    large_nptr[bnum]++;
+                }
+
+            }
 
             if (i < sdata->bitmap_start_id)
             {
@@ -694,10 +697,10 @@ void get_offsets(thread_soedata_t *thread_data)
             }
 
 #endif
-		
-		}
 
-	}
+        }
+
+    }
 
 	return;
 }
