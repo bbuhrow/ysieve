@@ -114,6 +114,9 @@ void get_offsets(thread_soedata_t *thread_data)
     {
         //uint32_t *lmp = sdata->lower_mod_prime;
 
+        mpz_t gmp_sqrt;
+        mpz_init(gmp_sqrt);
+
         for (i = startprime; i < sdata->bucket_start_id; i++)
         {
             prime = sdata->sieve_p[i];
@@ -136,7 +139,8 @@ void get_offsets(thread_soedata_t *thread_data)
             // a block, start that prime in the next block.
             if (sdata->sieve_p[i] > ddata->blk_b_sqrt)
             {
-                //printf("pbounds block %d = %u\n", block, i);
+                //printf("lblk_b = %lu, blk_b_sqrt = %lu, pbounds block %lu = %lu (%u)\n", 
+                //    ddata->lblk_b, ddata->blk_b_sqrt, block, i, sdata->sieve_p[i]);
                 ddata->pbounds[block] = i;
 
                 // if (block < (sdata->blocks - 0)) // <-- sometimes crashes, but correct ranges
@@ -145,7 +149,10 @@ void get_offsets(thread_soedata_t *thread_data)
                     block++;
                 ddata->lblk_b = ddata->ublk_b + prodN;
                 ddata->ublk_b += sdata->blk_r;
-                ddata->blk_b_sqrt = (uint64_t)(sqrt((int64_t)(ddata->ublk_b + prodN))) + 1;
+                //ddata->blk_b_sqrt = (uint64_t)(sqrt((int64_t)(ddata->ublk_b + prodN))) + 1;
+                mpz_set_ui(gmp_sqrt, ddata->ublk_b + prodN);
+                mpz_sqrt(gmp_sqrt, gmp_sqrt);
+                ddata->blk_b_sqrt = mpz_get_ui(gmp_sqrt) + 1;
             }
 
             s = sdata->root[i];
@@ -157,6 +164,8 @@ void get_offsets(thread_soedata_t *thread_data)
             // tmp2 = (uint64_t)s * (uint64_t)(lmp[i] + diff);
             ddata->offsets[i] = (uint32_t)(tmp2 % (uint64_t)prime);
         }
+
+        mpz_clear(gmp_sqrt);
     }
     else
     {
@@ -596,41 +605,25 @@ void get_offsets(thread_soedata_t *thread_data)
             {
                 // AVX2 (in soe_util.c) has arranged things so that the end of the
                 // sieve prime array is at an index divisible by 8.
-                for (i = ddata->largep_offset; i < sdata->bitmap_start_id; i += 2)
+                for (i = ddata->largep_offset; i < sdata->bitmap_start_id; i++)
                 {
-                    uint64_t tmp3;
-                    uint32_t p2, r2;
-                    int s2;
-
                     prime = sdata->sieve_p[i];
-                    p2 = sdata->sieve_p[i + 1];
-
                     s = sdata->root[i];
-                    s2 = sdata->root[i + 1];
 
                     // we solved for lower_mod_prime while computing the modular inverse of
                     // each prime, for the residue class 1.  add the difference between this
                     // residue class and 1 before multiplying by the modular inverse.
                     // could use (_mm256_mul_epu32 --> VPMULUDQ)
                     tmp2 = (uint64_t)s * (uint64_t)(lmp[i] + diff);
-                    tmp3 = (uint64_t)s2 * (uint64_t)(lmp[i + 1] + diff);
 
                     // would need custom solution
                     root = (uint32_t)(tmp2 % (uint64_t)prime);
-                    r2 = (uint32_t)(tmp3 % (uint64_t)p2);
 
                     // gather may help, but writes would need to be done 1 by 1.
                     if (root < linesize)
                     {
                         bnum = (root >> FLAGBITS);
                         large_bptr[bnum][large_nptr[bnum]] = root;
-                        large_nptr[bnum]++;
-                    }
-
-                    if (r2 < linesize)
-                    {
-                        bnum = (r2 >> FLAGBITS);
-                        large_bptr[bnum][large_nptr[bnum]] = r2;
                         large_nptr[bnum]++;
                     }
                 }

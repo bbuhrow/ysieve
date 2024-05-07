@@ -55,7 +55,21 @@ uint64_t estimate_primes_in_range(uint64_t lowlimit, uint64_t highlimit)
 	else
 		lo_est = 0;
 
-	return (uint64_t)((double)(hi_est - lo_est) * 1.2);
+	return (uint64_t)((double)(hi_est - lo_est) * 1.25);
+}
+
+
+uint64_t mpz_estimate_primes_in_range(mpz_t lowlimit, mpz_t highlimit)
+{
+    uint64_t hi_est, lo_est;
+
+    hi_est = (uint64_t)(mpz_get_d(highlimit) / log(mpz_get_d(highlimit)));
+    if (mpz_cmp_ui(lowlimit, 1) >= 0)
+        lo_est = (uint64_t)(mpz_get_d(lowlimit) / log(mpz_get_d(lowlimit)));
+    else
+        lo_est = 0;
+
+    return (uint64_t)((double)(hi_est - lo_est) * 1.25);
 }
 
 // row: numclasses 2 thru 480
@@ -474,7 +488,7 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
 		return 1;
 	}
 
-	if (highlimit > 4000000000000000000ULL)
+	if (highlimit > (0xffffffffffffffffULL - 0xffffffffULL - 1))
 	{
 		printf("input too large\n");
 		return 1;
@@ -485,8 +499,15 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
 	
 	if (offset == NULL)
 	{
+        mpz_t h;
+        mpz_init(h);
+        mpz_set_ui(h, highlimit);
+        mpz_sqrt(h, h);
+
 		//see if we were provided enough primes to do the job
-		sdata->pbound = (uint64_t)(sqrt((int64_t)(highlimit)));
+        sdata->pbound = (uint64_t)mpz_get_ui(h);
+
+        mpz_clear(h);
 
 		if (sieve_p[num_sp - 1] < sdata->pbound)
 		{
@@ -507,6 +528,8 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
             }
 		}
 		sdata->pboundi = i;	
+        sdata->pbound = sieve_p[sdata->pboundi - 1];
+        //printf("largest needed prime is %u at sieve_p index %d\n", sieve_p[i], i);
 
 #ifdef USE_AVX2
         // plus perhaps a few extra to get us to a convienient vector boundary.
@@ -523,12 +546,15 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
                 sdata->sieve_p = (uint32_t*)xrealloc(sdata->sieve_p, (num_sp + 8) * sizeof(uint32_t));
                 for (i = 0; i < 8; i++)
                 {
-                    sdata->sieve_p[num_sp + i] = sdata->sieve_p[num_sp - 1] + i;
+                    sdata->sieve_p[num_sp + i] = sdata->sieve_p[num_sp - 1] + 2*i;
                 }
                 sdata->num_sp = num_sp + 8;
             }
             sdata->pboundi++;
         }
+
+        //printf("pboundi is now %lu and maxp is %u\n", sdata->pboundi, sieve_p[sdata->pboundi - 1]);
+
 #endif
 		
 		sdata->offset = NULL;
@@ -562,6 +588,30 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
 			sdata->pbound = sieve_p[num_sp - 1];
 			sdata->pboundi = num_sp;
 		}
+
+#ifdef USE_AVX2
+        // plus perhaps a few extra to get us to a convienient vector boundary.
+        // fixme: it's possible that this overflows the sieve primes provided,
+        // when the range ends near the square of the max sieve prime.
+        // fixed by manually adding some if necessary.  The things we add don't
+        // even have to be primes because we are already sieving with all of the
+        // primes required.  Just need to be non-zero and the buffer needs
+        // to be grown if necessary.
+        while (sdata->pboundi & 7)
+        {
+            if (sdata->pboundi == num_sp)
+            {
+                sdata->sieve_p = (uint32_t*)xrealloc(sdata->sieve_p, (num_sp + 8) * sizeof(uint32_t));
+                for (i = 0; i < 8; i++)
+                {
+                    sdata->sieve_p[num_sp + i] = sdata->sieve_p[num_sp - 1] + i;
+                }
+                sdata->num_sp = num_sp + 8;
+            }
+            sdata->pboundi++;
+        }
+#endif
+
 		sdata->offset = offset;
 		mpz_clear(tmpz);
 		sdata->sieve_range = 1;

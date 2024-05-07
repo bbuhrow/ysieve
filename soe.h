@@ -35,7 +35,6 @@ SOFTWARE.
 
 #endif
 
-#include "threadpool.h"
 #include "gmp.h"
 #include "ytools.h"
 

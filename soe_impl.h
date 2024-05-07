@@ -266,6 +266,7 @@ uint64_t spSOE(soe_staticdata_t* sdata, mpz_t* offset,
 
 // misc and helper functions
 uint64_t estimate_primes_in_range(uint64_t lowlimit, uint64_t highlimit);
+uint64_t mpz_estimate_primes_in_range(mpz_t lowlimit, mpz_t highlimit);
 void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t* sdata);
 int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t* sieve_p,
     soe_staticdata_t* sdata, mpz_t offset);

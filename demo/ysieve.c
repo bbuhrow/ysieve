@@ -162,7 +162,6 @@ int main(int argc, char** argv)
     }
     
     soe_finalize(sdata);
-    free(sdata);
     free(startStr);
     free(stopStr);
     if (primes != NULL)

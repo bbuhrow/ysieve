@@ -64,21 +64,27 @@ void compute_prps_work_fcn(void *vptr)
     t->linecount = 0;
     for (i = t->startid; i < t->stopid; i++)
     {
-        if (((i & 127) == 0) && (sdata->VFLAG > 0))
-        {
-            printf("thread %d progress: %d%%\r", tdata->tindex, 
-                (int)((double)(i - t->startid) / (double)(t->stopid - t->startid) * 100.0));
-            fflush(stdout);
-        }
+        //if (((i & 127000) == 0) && (sdata->VFLAG > 0))
+        //{
+        //    printf("thread %d progress: %d%%\r", tdata->tindex, 
+        //        (int)((double)(i - t->startid) / (double)(t->stopid - t->startid) * 100.0));
+        //    fflush(stdout);
+        //}
 
         mpz_add_ui(t->tmpz, t->offset, t->ddata.primes[i - t->startid]);
         if ((mpz_cmp(t->tmpz, t->lowlimit) >= 0) && (mpz_cmp(t->highlimit, t->tmpz) >= 0))
         {
+			gmp_printf("candidate %Zd is...", t->tmpz);
             //if (mpz_extrastrongbpsw_prp(t->tmpz))
             if (mpz_probab_prime_p(t->tmpz, 1))
             {
                 t->ddata.primes[t->linecount++] = t->ddata.primes[i - t->startid];
+				printf("prime!\n");
             }
+			else
+			{
+				printf("not prime\n");
+			}
         }
     }
 
@@ -93,7 +99,7 @@ soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
 
     // bootstrap the sieve
     sdata->sieve_p = (uint32_t*)xmalloc(65536 * sizeof(uint32_t));
-    sdata->num_sp = tiny_soe(65536, sdata->sieve_p);
+    sdata->num_sp = tiny_soe(66000, sdata->sieve_p);
 
     sdata->VFLAG = vflag;
     sdata->THREADS = threads;
@@ -123,7 +129,14 @@ uint64_t *GetPRIMESRange(soe_staticdata_t* sdata,
 	//primes in the interval
 	if (offset != NULL)
 	{
-		i = (highlimit - lowlimit);
+		mpz_t a, b;
+		mpz_init(a);
+		mpz_init(b);
+		mpz_add_ui(a, *offset, lowlimit);
+		mpz_add_ui(b, *offset, highlimit);
+		i = mpz_estimate_primes_in_range(a, b);
+		mpz_clear(a);
+		mpz_clear(b);
 		primes = (uint64_t *)realloc(primes, (size_t) (i * sizeof(uint64_t)));
 		if (primes == NULL)
 		{
@@ -142,13 +155,7 @@ uint64_t *GetPRIMESRange(soe_staticdata_t* sdata,
 	}
 	else
 	{
-		hi_est = (uint64_t)(highlimit/log((double)highlimit));
-		if (lowlimit > 1)
-			lo_est = (uint64_t)(lowlimit/log((double)lowlimit));
-		else
-			lo_est = 0;
-
-		i = (uint64_t)((double)(hi_est - lo_est) * 1.25);
+		i = estimate_primes_in_range(lowlimit, highlimit);
 		primes = (uint64_t *)xrealloc(primes, (size_t) (i * sizeof(uint64_t)));
 	}
 
@@ -211,14 +218,28 @@ uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highl
         return primes;
     }
 
-	if (highlimit > (sdata->sieve_p[sdata->num_sp-1] * sdata->sieve_p[sdata->num_sp-1]))
+	mpz_t a, b;
+	mpz_init(a);
+	mpz_init(b);
+	mpz_set_ui(a, highlimit);
+	mpz_set_ui(b, sdata->sieve_p[sdata->num_sp - 1]);
+	mpz_mul_ui(b, b, sdata->sieve_p[sdata->num_sp - 1]);
+	retval = (mpz_cmp(a, b) > 0);
+	
+
+	//printf("highlimit = %lu, num_sp = %u, spmax = %u\n",
+	//	highlimit, sdata->num_sp, sdata->sieve_p[sdata->num_sp - 1]);
+
+	//if (highlimit > (sdata->sieve_p[sdata->num_sp-1] * sdata->sieve_p[sdata->num_sp-1]))
+	if (retval)
 	{
 		//then we need to generate more sieving primes
 		uint32_t range_est;
 
 		//allocate array based on conservative estimate of the number of 
 		//primes in the interval	
-		max_p = (uint32_t)sqrt((int64_t)(highlimit)) + 65536;
+		mpz_sqrt(b, a);
+		max_p = (uint32_t)mpz_get_ui(b) + 65536;
 		range_est = (uint32_t)estimate_primes_in_range(0, (uint64_t)max_p);
 
         if (sdata->VFLAG > 1)
@@ -248,6 +269,9 @@ uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highl
 		free(primes);
 		primes = NULL;
 	}
+
+	mpz_clear(a);
+	mpz_clear(b);
 
 	if (count)
 	{
@@ -431,6 +455,17 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 
 	if (count)
 	{
+		gmp_printf("commencing sieve over interval %Zd + (%lu:%lu) with %u sieve primes\n",
+			*offset, 0, range, sdata->num_sp);
+	}
+	else
+	{
+		gmp_printf("commencing test over interval %Zd + (%lu:%lu) with %u sieve primes and num_witness = %d\n",
+			*offset, 0, range, sdata->num_sp, num_witnesses);
+	}
+
+	if (count)
+	{
 		//this needs to be a range of at least 1e6
 		if (range < 1000000)
 		{
@@ -550,6 +585,7 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
                 printf("starting PRP tests with %d witnesses on "
                     "%" PRIu64 " surviving candidates using %d threads\n",
                     num_witnesses, *num_p, sdata->THREADS);
+				fflush(stdout);
             }
 
 			range = *num_p / sdata->THREADS;
@@ -568,6 +604,7 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
                 {
                     printf("thread %d computing PRPs from %u to %u\n",
                         (int)j, t->startid, t->stopid);
+					fflush(stdout);
                 }
 			}
 
@@ -577,62 +614,100 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
                 thread_data[sdata->THREADS - 1].stopid = (uint32_t)*num_p;
             }
 
-			// allocate space for stuff in the threads
-			for (j = 0; j < sdata->THREADS; j++)
+			if (sdata->THREADS == 1)
 			{
-				thread_soedata_t *t = thread_data + j;
+				mpz_t tmpz;
+				mpz_init(tmpz);
 
-				mpz_init(t->tmpz);
-				mpz_init(t->offset);
-				mpz_init(t->lowlimit);
-				mpz_init(t->highlimit);
-				mpz_set(t->offset, *offset);
-				mpz_set(t->lowlimit, lowlimit);
-				mpz_set(t->highlimit, highlimit);
-				t->current_line = (uint64_t)num_witnesses;
+				retval = 0;
+				for (i = 0; i < range; i++)
+				{
+					//if (((i & 127000) == 0) && (sdata->VFLAG > 0))
+					//{
+					//    printf("thread %d progress: %d%%\r", tdata->tindex, 
+					//        (int)((double)(i - t->startid) / (double)(t->stopid - t->startid) * 100.0));
+					//    fflush(stdout);
+					//}
 
-				t->ddata.primes = (uint64_t *)malloc((t->stopid - t->startid) * sizeof(uint64_t));
-                for (i = t->startid; i < t->stopid; i++)
-                {
-                    t->ddata.primes[i - t->startid] = values[i];
-                }
+					mpz_add_ui(tmpz, *offset, values[i]);
+					if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
+					{
+						//gmp_printf("candidate %Zd is...", tmpz);
+						//if (mpz_extrastrongbpsw_prp(t->tmpz))
+						if (mpz_probab_prime_p(tmpz, 1))
+						{
+							values[retval++] = values[i];
+							//printf("prime!\n");
+						}
+						else
+						{
+							//printf("not prime\n");
+						}
+					}
+				}
+				mpz_clear(tmpz);
+				*num_p = retval;
 			}
+			else
+			{
+				// allocate space for stuff in the threads
+				for (j = 0; j < sdata->THREADS; j++)
+				{
+					thread_soedata_t* t = thread_data + j;
 
-			// now run with the threads.  don't really need the 
-            // threadpool since we are statically dividing up the range
-            // to test, but it is easy so we use it.
-            udata.sdata = &thread_data->sdata;
-            udata.ddata = thread_data;
-            tpool_data = tpool_setup(sdata->THREADS, NULL, NULL, NULL,
-                &compute_prps_dispatch, &udata);
+					mpz_init(t->tmpz);
+					mpz_init(t->offset);
+					mpz_init(t->lowlimit);
+					mpz_init(t->highlimit);
+					mpz_set(t->offset, *offset);
+					mpz_set(t->lowlimit, lowlimit);
+					mpz_set(t->highlimit, highlimit);
+					t->current_line = (uint64_t)num_witnesses;
 
-            thread_data->sdata.sync_count = 0;
-            tpool_add_work_fcn(tpool_data, &compute_prps_work_fcn);
-            tpool_go(tpool_data);
+					t->ddata.primes = (uint64_t*)malloc((t->stopid - t->startid) * sizeof(uint64_t));
+					for (i = t->startid; i < t->stopid; i++)
+					{
+						t->ddata.primes[i - t->startid] = values[i];
+					}
+				}
 
-            free(tpool_data);
+				// now run with the threads.  don't really need the 
+				// threadpool since we are statically dividing up the range
+				// to test, but it is easy so we use it.
+				udata.sdata = &thread_data->sdata;
+				udata.ddata = thread_data;
+				tpool_data = tpool_setup(sdata->THREADS, NULL, NULL, NULL,
+					&compute_prps_dispatch, &udata);
 
-			// combine results and free stuff
-			retval = 0;
-            for (i = 0; i < sdata->THREADS; i++)
-            {
-                thread_soedata_t* t = thread_data + i;
+				thread_data->sdata.sync_count = 0;
+				tpool_add_work_fcn(tpool_data, &compute_prps_work_fcn);
+				tpool_go(tpool_data);
 
-                for (j = 0; j < t->linecount; j++)
-                {
-                    values[retval++] = t->ddata.primes[j];
-                }
+				free(tpool_data);
 
-                free(t->ddata.primes);
-                mpz_clear(t->tmpz);
-                mpz_clear(t->offset);
-                mpz_clear(t->lowlimit);
-                mpz_clear(t->highlimit);
-            }
+				// combine results and free stuff
+				retval = 0;
+				for (i = 0; i < sdata->THREADS; i++)
+				{
+					thread_soedata_t* t = thread_data + i;
 
-			free(thread_data);
+					for (j = 0; j < t->linecount; j++)
+					{
+						values[retval++] = t->ddata.primes[j];
+					}
 
-			*num_p = retval;
+					free(t->ddata.primes);
+					mpz_clear(t->tmpz);
+					mpz_clear(t->offset);
+					mpz_clear(t->lowlimit);
+					mpz_clear(t->highlimit);
+				}
+
+				free(thread_data);
+
+				*num_p = retval;
+			}
+			
             if (sdata->VFLAG > 0)
             {
                 printf("found %" PRIu64 " PRPs\n", *num_p);

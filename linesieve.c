@@ -413,57 +413,6 @@ void sieve_line(thread_soedata_t *thread_data)
 		flagblock += SOEBLOCKSIZE;
 	}
 
-	// experiment: for big primes above some bound, sieve the entire line at once
-	if (0)
-	{
-		uint64_t LINESIZE = 262144 * sdata->blocks;
-		uint32_t* lmp = sdata->lower_mod_prime;
-		uint32_t diff = sdata->rclass[thread_data->current_line] - 1;
-
-		for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
-		{
-			prime = sdata->sieve_p[j];
-
-			int s = sdata->root[j];
-
-			// the lower block bound (lblk_b) times s can exceed 64 bits for large ranges,
-			// so reduce mod p here as well.
-			uint64_t tmp2 = (uint64_t)s * (uint64_t)(lmp[j] + diff);
-
-			// tmp2 = (uint64_t)s * (uint64_t)(lmp[i] + diff);
-			ddata->offsets[j] = (uint32_t)(tmp2 % (uint64_t)prime);
-		}
-
-		flagblock = line;
-		for (i = 0; i < sdata->blocks - 8; i += 8)
-		{
-			for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
-			{
-				prime = sdata->sieve_p[j];
-
-				for (k = ddata->offsets[j]; k < 2097152; k += prime)
-				{
-					flagblock[k >> 3] &= masks[k & 7];
-				}
-				ddata->offsets[j] = k - 2097152;
-			}
-			flagblock += 262144;
-		}
-		for (; i < sdata->blocks; i++)
-		{
-			for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
-			{
-				prime = sdata->sieve_p[j];
-
-				for (k = ddata->offsets[j]; k < 262144; k += prime)
-				{
-					flagblock[k >> 3] &= masks[k & 7];
-				}
-			}
-			flagblock += 262144;
-		}
-	}
-
 	return;
 }
 
@@ -2081,17 +2030,25 @@ void sieve_line_avx2_32k(thread_soedata_t *thread_data)
 	//uint32_t maxP;
 	int stopid;
 
+	//printf("lowlimit = %lu, range = %lu\n", sdata->lowlimit, sdata->blk_r);
+
 	ddata->lblk_b = sdata->lowlimit + sdata->rclass[current_line];
 	ddata->ublk_b = sdata->blk_r + ddata->lblk_b - sdata->prodN;
-	ddata->blk_b_sqrt = (sqrt(ddata->ublk_b + sdata->prodN)) + 1;
+
+	mpz_t gmp_sqrt;
+	mpz_init(gmp_sqrt);
+
+	//ddata->blk_b_sqrt = (sqrt(ddata->ublk_b + sdata->prodN)) + 1;
+
+	mpz_set_ui(gmp_sqrt, ddata->ublk_b + sdata->prodN);
+	mpz_sqrt(gmp_sqrt, gmp_sqrt);
+	ddata->blk_b_sqrt = mpz_get_ui(gmp_sqrt) + 1;
+
+	mpz_clear(gmp_sqrt);
 
 	// for the current line, find the offsets of each small/med prime past the low limit
 	// and bucket sieve large primes
 	get_offsets(thread_data);
-
-    // if (sdata->numclasses == 480)
-    //     printf("the offset for p=%u (root %u) is %u\n", sdata->sieve_p[5], 
-    //         sdata->root[5], ddata->offsets[5]);
 
 	flagblock = line;
 	for (i = 0; i < sdata->blocks; i++)
@@ -2127,13 +2084,6 @@ void sieve_line_avx2_32k(thread_soedata_t *thread_data)
 
 		// start where presieving left off, which is different for various cpus.
         j = sdata->presieve_max_id;
-        //if (sdata->numclasses == 2)
-        //    j = 2;
-        //else
-        //    j = 5;
-
-		// unroll the loop: all primes less than this max hit the interval at least 16 times
-		//maxP = 262144 >> 4;
 
 		// at first glance it looks like AVX2 operations to compute the indices
 		// might be helpful, but since we can't address memory with SIMD registers
@@ -2375,7 +2325,6 @@ void sieve_line_avx2_32k(thread_soedata_t *thread_data)
 
 		// primes are getting fairly big now, unrolling is less useful.
 		// keep going up to the large prime bound.
-		//stopid = MIN(ddata->pbounds[i], 23002);
 		stopid = ddata->pbounds[i];
         for (; j < stopid; j++)
         {
@@ -2419,6 +2368,11 @@ void sieve_line_avx2_32k(thread_soedata_t *thread_data)
 			ddata->offsets[j] = (uint32_t)(k - 262144);
 		}
 
+		// Now that we have sieved tiny, small, and medium-sized primes
+		// it is time to dump in the buckets.  Larger primes were sorted
+		// into buckets (one bucket per block per residue class) in the
+		// get_offsets function in the file offsets.c.
+		// This is where AVX2 provides some benefit.
 		if (ddata->bucket_depth > 0)
 		{
 			__m256i vt1, vt2, vt3, vt4;      // temp vectors
@@ -2487,6 +2441,9 @@ void sieve_line_avx2_32k(thread_soedata_t *thread_data)
 			// repeat the dumping of bucket primes, this time with very large primes
 			// that only hit the interval once.  thus, we don't need to update the root
 			// with the next hit, and we can do more at once because each bucket hit is smaller
+			// Todo: see if it is any faster to not sort into block buckets and just
+			// dump all primes into the whole line at once.  Maybe we can even sort them
+			// first.
 			if (ddata->largep_offset > 0)
 			{
 				__m256i vbuck;
@@ -2571,57 +2528,6 @@ void sieve_line_avx2_32k(thread_soedata_t *thread_data)
 		flagblock += 32768;
 	}
 
-	// experiment: for big primes above some bound, sieve the entire line at once
-	if (0)
-	{
-		uint64_t LINESIZE = 262144 * sdata->blocks;
-		uint32_t* lmp = sdata->lower_mod_prime;
-		uint32_t diff = sdata->rclass[thread_data->current_line] - 1;
-
-		for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
-		{
-			prime = sdata->sieve_p[j];
-
-			int s = sdata->root[j];
-
-			// the lower block bound (lblk_b) times s can exceed 64 bits for large ranges,
-			// so reduce mod p here as well.
-			uint64_t tmp2 = (uint64_t)s * (uint64_t)(lmp[j] + diff);
-
-			// tmp2 = (uint64_t)s * (uint64_t)(lmp[i] + diff);
-			ddata->offsets[j] = (uint32_t)(tmp2 % (uint64_t)prime);
-		}
-
-		flagblock = line;
-		for (i = 0; i < sdata->blocks - 8; i += 8)
-		{
-			for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
-			{
-				prime = sdata->sieve_p[j];
-
-				for (k = ddata->offsets[j]; k < 2097152; k += prime)
-				{
-					flagblock[k >> 3] &= masks[k & 7];
-				}
-				ddata->offsets[j] = k - 2097152;
-			}
-			flagblock += 262144;
-		}
-		for (; i < sdata->blocks; i++)
-		{
-			for (j = sdata->bitmap_start_id; j < sdata->pboundi; j++)
-			{
-				prime = sdata->sieve_p[j];
-
-				for (k = ddata->offsets[j]; k < 262144; k += prime)
-				{
-					flagblock[k >> 3] &= masks[k & 7];
-				}
-				ddata->offsets[j] = k - 262144;
-			}
-			flagblock += 32768;
-		}
-	}
 
 	return;
 }

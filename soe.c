@@ -478,6 +478,9 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
 	// determine what kind of sieve to use based on the input
 	get_numclasses(*highlimit, lowlimit, sdata);
 
+    if (*offset != NULL)
+        sdata->use_monty = 0;
+
 	// allocate and initialize some stuff
 	allocated_bytes += init_sieve(sdata);
 	*highlimit = sdata->highlimit;
@@ -504,7 +507,14 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
 		printf("sieving range %" PRIu64 " to %" PRIu64 "\n",
             sdata->lowlimit,*highlimit);
 		printf("using %" PRIu64 " primes, max prime = %" PRIu64 "  \n", 
-            sdata->pboundi,sdata->pbound);
+            sdata->pboundi,sdata->sieve_p[sdata->pboundi - 1]);
+        //printf("last 1k primes:");
+        //int i;
+        //for (i = 0; i < 1000; i++)
+        //{
+        //    if ((i % 4) == 0) printf("\n");
+        //    printf("%u ", sdata->sieve_p[sdata->num_sp - 1000 + i]);
+        //}
 		printf("using %u residue classes\n",sdata->numclasses);
 
         if (sdata->use_monty)
