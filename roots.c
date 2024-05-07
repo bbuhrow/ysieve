@@ -570,7 +570,7 @@ void getRoots(soe_staticdata_t *sdata, thread_soedata_t *thread_data)
             {
                 printf("bucket start id = %u, bitmap start id = %u\n",
                     sdata->bucket_start_id, sdata->bitmap_start_id);
-                printf("assiging thread %d root computation over %u to %u\n",
+                printf("assigning thread %d root computation over %u to %u\n",
                     j, t->startid, t->stopid); fflush(stdout);
             }
         }

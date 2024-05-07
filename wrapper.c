@@ -59,6 +59,7 @@ void compute_prps_work_fcn(void *vptr)
     soe_userdata_t *udata = (soe_userdata_t *)tdata->user_data;
     soe_staticdata_t *sdata = udata->sdata;
     thread_soedata_t *t = &udata->ddata[tdata->tindex];
+	int witnesses = sdata->witnesses;
     int i;
     
     t->linecount = 0;
@@ -74,16 +75,16 @@ void compute_prps_work_fcn(void *vptr)
         mpz_add_ui(t->tmpz, t->offset, t->ddata.primes[i - t->startid]);
         if ((mpz_cmp(t->tmpz, t->lowlimit) >= 0) && (mpz_cmp(t->highlimit, t->tmpz) >= 0))
         {
-			gmp_printf("candidate %Zd is...", t->tmpz);
+			//gmp_printf("candidate %Zd is...", t->tmpz);
             //if (mpz_extrastrongbpsw_prp(t->tmpz))
-            if (mpz_probab_prime_p(t->tmpz, 1))
+            if (mpz_probab_prime_p(t->tmpz, witnesses))
             {
                 t->ddata.primes[t->linecount++] = t->ddata.primes[i - t->startid];
-				printf("prime!\n");
+				//printf("prime!\n");
             }
 			else
 			{
-				printf("not prime\n");
+				//printf("not prime\n");
 			}
         }
     }
@@ -138,6 +139,9 @@ uint64_t *GetPRIMESRange(soe_staticdata_t* sdata,
 		mpz_clear(a);
 		mpz_clear(b);
 		primes = (uint64_t *)realloc(primes, (size_t) (i * sizeof(uint64_t)));
+
+		printf("allocating space for an estimated %lu primes in requested range\n", i);
+
 		if (primes == NULL)
 		{
             if (offset == NULL)
@@ -634,7 +638,7 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 					{
 						//gmp_printf("candidate %Zd is...", tmpz);
 						//if (mpz_extrastrongbpsw_prp(t->tmpz))
-						if (mpz_probab_prime_p(tmpz, 1))
+						if (mpz_probab_prime_p(tmpz, sdata->witnesses))
 						{
 							values[retval++] = values[i];
 							//printf("prime!\n");

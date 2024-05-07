@@ -161,6 +161,12 @@ uint64_t primes_from_lineflags(soe_staticdata_t *sdata, thread_soedata_t *thread
             // then just split the overall range into equal parts
             memchunk = (sdata->orig_hlimit - sdata->orig_llimit) / sdata->THREADS + sdata->THREADS;
 
+            if (sdata->VFLAG > 2)
+            {
+                printf("allocating temporary space for %" PRIu64 " primes per thread\n",
+                    memchunk);
+            }
+
             for (i = 0; i < sdata->THREADS; i++)
             {
                 thread_soedata_t *t = thread_data + i;

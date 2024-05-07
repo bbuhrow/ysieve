@@ -88,6 +88,7 @@ int main(int argc, char** argv)
     }
 
     sdata = soe_init(options->verbosity, options->threads, options->blocksize);
+    sdata->witnesses = options->num_witnesses;
 
     gettimeofday(&tstart, NULL);
     
@@ -129,7 +130,7 @@ int main(int argc, char** argv)
         printf("using %u sieve primes up to %u\n", 
             sdata->num_sp, sdata->sieve_p[sdata->num_sp - 1]);
 
-        primes = sieve_to_depth(sdata, low, high, count, 1,
+        primes = sieve_to_depth(sdata, low, high, count, options->num_witnesses,
             sdata->sieve_p[sdata->num_sp - 1], &num_found, 
             haveFile, options->outScreen);
 

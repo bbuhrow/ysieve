@@ -61,15 +61,36 @@ uint64_t estimate_primes_in_range(uint64_t lowlimit, uint64_t highlimit)
 
 uint64_t mpz_estimate_primes_in_range(mpz_t lowlimit, mpz_t highlimit)
 {
-    uint64_t hi_est, lo_est;
+    double hi_est, lo_est;
+    uint64_t est;
 
-    hi_est = (uint64_t)(mpz_get_d(highlimit) / log(mpz_get_d(highlimit)));
+    //gmp_printf("estimating primes in range %Zd : %Zd\n", lowlimit, highlimit);
+    //
+    //printf("double hi = %lf, log(double hi) = %lf\n",
+    //    mpz_get_d(highlimit), log(mpz_get_d(highlimit)));
+    //
+    //printf("double lo = %lf, log(double lo) = %lf\n",
+    //    mpz_get_d(lowlimit), log(mpz_get_d(lowlimit)));
+
+    hi_est = (mpz_get_d(highlimit) / log(mpz_get_d(highlimit)));
     if (mpz_cmp_ui(lowlimit, 1) >= 0)
-        lo_est = (uint64_t)(mpz_get_d(lowlimit) / log(mpz_get_d(lowlimit)));
+        lo_est = (mpz_get_d(lowlimit) / log(mpz_get_d(lowlimit)));
     else
-        lo_est = 0;
+        lo_est = 0.;
 
-    return (uint64_t)((double)(hi_est - lo_est) * 1.25);
+    //printf("hi estimate = %lf\nlo estimate = %lf\n", hi_est, lo_est);
+
+    // a problem here is that the range may be severely undersieved
+    // so that an estimate of primes in the range will be way smaller
+    // then the number of candidates found.  The best way to deal with
+    // this is to realloc the primes array while storing candidates.  For
+    // now we just use a big fudge factor to the estimate.
+    est = (uint64_t)((hi_est - lo_est) * 4);
+    //printf("estimate = %lu\n", est);
+
+    if (est == 0)
+        est = 1000000;
+    return est;
 }
 
 // row: numclasses 2 thru 480

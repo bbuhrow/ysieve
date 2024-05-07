@@ -68,6 +68,7 @@ typedef struct
     int VFLAG;
     int THREADS;
     int sync_count;
+	int witnesses;
 	uint32_t *sieve_p;
     uint32_t num_sp;
 	int *root;
