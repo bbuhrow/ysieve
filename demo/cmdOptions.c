@@ -34,6 +34,7 @@ SOFTWARE.
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include "gmp.h"
 
 void printUsage(options_t* options);
 
@@ -131,7 +132,17 @@ void applyOpt(char* opt, char* arg, options_t* options)
     }
     else if (strcmp(opt, options->OptionArray[5]) == 0)
     {
-        options->sieve_primes_limit = strtoul(arg, NULL, 10);
+        mpz_t sp;
+        mpz_init(sp);
+        mpz_set_str(sp, arg, 10);
+        if (mpz_cmp_ui(sp, 5000000000ULL) > 0) // 2147483648) > 0)
+        {
+            printf("sieve prime limit must be < 2^31\n");
+            exit(0);
+        }
+        options->sieve_primes_limit = mpz_get_ui(sp);
+        mpz_clear(sp);
+
     }
     else if (strcmp(opt, options->OptionArray[6]) == 0)
     {
