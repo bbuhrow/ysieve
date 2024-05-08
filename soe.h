@@ -69,6 +69,7 @@ typedef struct
     int THREADS;
     int sync_count;
 	int witnesses;
+	int userclasses;
 	uint32_t *sieve_p;
     uint32_t num_sp;
 	int *root;
@@ -88,7 +89,7 @@ typedef struct
 	uint64_t pboundi;
 
 	uint32_t bucket_start_id;
-	uint32_t large_bucket_start_prime;
+	uint64_t large_bucket_start_prime;
 	uint32_t num_bucket_primes;
     uint64_t bitmap_lower_bound;
 	uint32_t bitmap_start_id;
@@ -122,6 +123,7 @@ typedef struct
     // Montgomery arithmetic setup costs (reduction for each prime
     // is only performed twice).
     int use_monty;
+	int is_main_sieve;
 
     // masks for removing or reading single bits in a byte.  nmasks are simply
     // the negation of these masks, and are filled in within the spSOE function.

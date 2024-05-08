@@ -85,7 +85,6 @@ void sieve_line(thread_soedata_t *thread_data)
 	// and bucket sieve large primes
 	get_offsets(thread_data);
 
-    // one is not a prime
     flagblock = line;
 	for (i = 0; i < sdata->blocks; i++)
 	{
@@ -99,6 +98,7 @@ void sieve_line(thread_soedata_t *thread_data)
 
         if (sdata->sieve_range == 0)
         {
+			// one is not a prime
             if ((sdata->rclass[current_line] == 1) &&
                 (sdata->lowlimit <= 1) && (i == 0))
                 flagblock[0] &= 0xfe;
@@ -400,11 +400,14 @@ void sieve_line(thread_soedata_t *thread_data)
 
 		if (i == 0)
 		{
+			// find the smallest value indicated as prime by the main sieve.
 			for (j = 0; j < FLAGSIZE; j++)
 			{
 				if (flagblock[j >> 3] & nmasks[j & 7])
 				{
 					ddata->min_sieved_val = sdata->prodN * j + sdata->rclass[current_line] + sdata->lowlimit;
+					//printf("bit position %d is set in class %d, p = %u\n",
+					//	j, sdata->rclass[current_line], ddata->min_sieved_val);
 					break;
 				}
 			}

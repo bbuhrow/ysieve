@@ -48,6 +48,7 @@ uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
 
     //printf("orig lolimit: %lu\n", sdata->orig_llimit);
     //printf("orig hilimit: %lu\n", sdata->orig_hlimit);
+	//printf("numlinebytes: %lu\n", numlinebytes);
     //printf("line start: %lu\n", (uint64_t)sdata->rclass[current_line] + lowlimit);
     //printf("line stop:  %lu\n", (uint64_t)sdata->rclass[current_line] + lowlimit + prodN * numlinebytes * 8);
     extra = (uint64_t)sdata->rclass[current_line] + lowlimit + prodN * numlinebytes * 8;
@@ -56,41 +57,43 @@ uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
     //printf("extra numbers beyond orig hlimit: %lu\n", extra);
     //printf("extra flags beyond orig hlimit: %lu\n", (extra / prodN) + ((extra % prodN) > 0));
 
-    // translate the amount of extra number-line covered to
-    // the number of extra flags (which are spaced by prodN).
-    lastbyte = (extra / prodN);
+	if (0)
+	{
+		// translate the amount of extra number-line covered to
+		// the number of extra flags (which are spaced by prodN).
+		lastbyte = (extra / prodN);
 
-    // convert from an amount of extra bytes measured relative
-    // from the end of the line to the last used byte as measured
-    // from the beginning of the line.  Same for the extra bits.
-    if (lastbyte > 8)
-        lastbyte = numlinebytes - lastbyte / 8 + 1;
-    else
-        lastbyte = numlinebytes;
+		// convert from an amount of extra bytes measured relative
+		// from the end of the line to the last used byte as measured
+		// from the beginning of the line.  Same for the extra bits.
+		if (lastbyte > 8)
+			lastbyte = numlinebytes - lastbyte / 8 + 1;
+		else
+			lastbyte = numlinebytes;
 
-    // now crawl backwards from this point and zero out bits 
-    // until we reach the exact original high-limit point.
-    for (ix = lastbyte * 8 - 1; ix > 0; ix--)
-    {
-        prime = prodN * (uint64_t)ix + (uint64_t)sdata->rclass[current_line] + lowlimit;
+		// now crawl backwards from this point and zero out bits 
+		// until we reach the exact original high-limit point.
+		for (ix = lastbyte * 8 - 1; ix > 0; ix--)
+		{
+			prime = prodN * (uint64_t)ix + (uint64_t)sdata->rclass[current_line] + lowlimit;
 
-        if (prime > sdata->orig_hlimit)
-        {
-            flagblock[ix >> 3] &= masks[ix & 7];
-        }
-        else
-        {
-            break;
-        }
-    }
+			if (prime > sdata->orig_hlimit)
+			{
+				flagblock[ix >> 3] &= masks[ix & 7];
+			}
+			else
+			{
+				break;
+			}
+		}
 
-    // now zero out full bytes until we reach a 256-bit boundary.
-    // that will be the stopping point for the counting routine below.
-    for (i = lastbyte; (i < numlinebytes) && ((i & 63) > 0); i++)
-    {
-        flagblock[i] = 0;
-    }
-    
+		// now zero out full bytes until we reach a 256-bit boundary.
+		// that will be the stopping point for the counting routine below.
+		for (i = lastbyte; (i < numlinebytes) && ((i & 63) > 0); i++)
+		{
+			flagblock[i] = 0;
+		}
+	}
 
 #ifdef USE_AVX2
 
@@ -107,7 +110,43 @@ uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
     // one that non-simd code uses, below) to compute the popcount
     // for four 64-bit words simultaneously.
     //for (i = 0; i < (numlinebytes >> 5); i+=2)
-    stopcount = i / 32;
+	uint64_t numchunks = (sdata->orig_hlimit - lowlimit) / (512 * prodN) + 1;
+	
+	//printf("Warren's algorithm processing through flag %lu, integer %lu\n",
+	//	numchunks * 512, numchunks * 512 * prodN + sdata->rclass[current_line]);
+
+	// zero out full bytes between the last chunk and the original
+	// range limit.
+	uint64_t num = lowlimit + numchunks * 512 * prodN + sdata->rclass[current_line] - 8 * prodN;
+	i = numchunks * 512 / 8 - 1;
+
+	//printf("zeroing flag bytes from %lu (index %lu)", num + 8 * prodN, i + 1);
+	while (num > sdata->orig_hlimit)
+	{
+		flagblock[i] = 0;
+		num -= 8 * prodN;
+		i--;
+	}
+	i++;
+	num += 8 * prodN;
+	//printf("to %lu (index %lu)\n", num, i);
+
+	// zero out individual bits between the last chunk and the original
+	// range limit.
+	i *= 8;
+	
+	//printf("zeroing flag bits from %lu (index %lu)", num, i);
+
+	while (num > sdata->orig_hlimit)
+	{
+		flagblock[i >> 3] &= masks[i & 7];
+		num -= prodN;
+		i--;
+	}
+
+	//printf("to %lu (index %lu)\n", num, i);
+
+	stopcount = numchunks * 2; // i / 32;
     for (i = 0; i < stopcount; i += 2)
     {
         __m256i t1, t2, t3, t4;
@@ -158,9 +197,35 @@ uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
 
 #else
 
+	// process 64 bits at a time by using Warren's algorithm
+	uint64_t numchunks = (sdata->orig_hlimit - lowlimit) / (64 * prodN) + 1;
+
+	// zero out full bytes between the last chunk and the original
+	// range limit.
+	uint64_t num = lowlimit + numchunks * 64 * prodN + sdata->rclass[current_line] - 8 * prodN;
+	i = numchunks * 64 / 8 - 1;
+
+	while (num > sdata->orig_hlimit)
+	{
+		flagblock[i] = 0;
+		num -= 8 * prodN;
+		i--;
+	}
+	i++;
+	num += 8 * prodN;
+	// zero out individual bits between the last chunk and the original
+	// range limit.
+	i *= 8;
+	while (num > sdata->orig_hlimit)
+	{
+		flagblock[i >> 3] &= masks[i & 7];
+		num -= prodN;
+		i--;
+	}
+
     uint64_t* flagblock64 = (uint64_t*)line;
-    stopcount = i / 8;
-    for (i = 0; i < stopcount; i++)
+
+    for (i = 0; i < numchunks; i++)
 	{
 		/* Convert to 64-bit unsigned integer */    
 		uint64_t x = flagblock64[i];
@@ -185,18 +250,18 @@ uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
 
 	// potentially misses the last few bytes
 	// use the simpler baseline method to get these few
-	flagblock = line;
-	for (k=0; k<(numlinebytes & 7);k++)
-	{
-		it += (flagblock[(i<<3)+k] & nmasks[0]) >> 7;
-		it += (flagblock[(i<<3)+k] & nmasks[1]) >> 6;
-		it += (flagblock[(i<<3)+k] & nmasks[2]) >> 5;
-		it += (flagblock[(i<<3)+k] & nmasks[3]) >> 4;
-		it += (flagblock[(i<<3)+k] & nmasks[4]) >> 3;
-		it += (flagblock[(i<<3)+k] & nmasks[5]) >> 2;
-		it += (flagblock[(i<<3)+k] & nmasks[6]) >> 1;
-		it += (flagblock[(i<<3)+k] & nmasks[7]);
-	}
+	//flagblock = line;
+	//for (k=0; k<(numlinebytes & 7);k++)
+	//{
+	//	it += (flagblock[(i<<3)+k] & nmasks[0]) >> 7;
+	//	it += (flagblock[(i<<3)+k] & nmasks[1]) >> 6;
+	//	it += (flagblock[(i<<3)+k] & nmasks[2]) >> 5;
+	//	it += (flagblock[(i<<3)+k] & nmasks[3]) >> 4;
+	//	it += (flagblock[(i<<3)+k] & nmasks[4]) >> 3;
+	//	it += (flagblock[(i<<3)+k] & nmasks[5]) >> 2;
+	//	it += (flagblock[(i<<3)+k] & nmasks[6]) >> 1;
+	//	it += (flagblock[(i<<3)+k] & nmasks[7]);
+	//}
 
 	// eliminate the primes flaged that are above or below the
 	// actual requested limits. as both of these can change to 

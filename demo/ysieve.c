@@ -42,6 +42,7 @@ SOFTWARE.
 #include "cmdOptions.h"
 #include "soe.h"
 #include "ytools.h"
+#include "soe_impl.h"
 
 
 int main(int argc, char** argv)
@@ -89,6 +90,7 @@ int main(int argc, char** argv)
 
     sdata = soe_init(options->verbosity, options->threads, options->blocksize);
     sdata->witnesses = options->num_witnesses;
+    sdata->userclasses = options->numclasses;
 
     gettimeofday(&tstart, NULL);
     
@@ -101,37 +103,8 @@ int main(int argc, char** argv)
         mpz_set_str(low, startStr, 10);
         mpz_set_str(high, stopStr, 10);
 
-        // sieve with the range requested, down to a minimum of 1000.
-        // (so that we don't run into issues with the presieve.)
-        if (options->sieve_primes_limit < sdata->sieve_p[sdata->num_sp - 1])
-        {
-            while ((options->sieve_primes_limit < sdata->sieve_p[sdata->num_sp - 1]) &&
-                (sdata->sieve_p[sdata->num_sp - 1] > 1000))
-            {
-                sdata->num_sp--;
-            }
-        }
-        else
-        {
-            int i;
-            uint64_t *primes = soe_wrapper(sdata, 0, options->sieve_primes_limit, 
-                0, &num_found, 0, 0);
-
-            sdata->sieve_p = (uint32_t*)xrealloc(sdata->sieve_p, num_found * sizeof(uint32_t));
-            for (i = 0; i < num_found; i++)
-            {
-                sdata->sieve_p[i] = (uint32_t)primes[i];
-            }
-            sdata->num_sp = (uint32_t)num_found;
-            free(primes);
-        }
-
-        gmp_printf("starting sieve on bounds %Zd : %Zd\n", low, high);
-        printf("using %u sieve primes up to %u\n", 
-            sdata->num_sp, sdata->sieve_p[sdata->num_sp - 1]);
-
         primes = sieve_to_depth(sdata, low, high, count, options->num_witnesses,
-            sdata->sieve_p[sdata->num_sp - 1], &num_found, 
+            options->sieve_primes_limit, &num_found,
             haveFile, options->outScreen);
 
         mpz_sub(high, high, low);

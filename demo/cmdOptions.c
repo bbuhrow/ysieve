@@ -48,13 +48,14 @@ char usageHelp[MAXHELPLEN] = "[start (default 0)] stop [options]";
 
 // command line options, specified by '-'
 char OptionArray[NUMOPTIONS][MAXOPTIONLEN] = { 
-    "t", "s", "f", "v", "b", "p", "w"};
+    "t", "s", "f", "v", "b", "p", "w", "c"};
 
 // command line option aliases, specified by '--'
 // need the same number of strings here, even if
 // some of them are blank (i.e., have no long form alias).
 char LongOptionAliases[NUMOPTIONS][MAXOPTIONLEN] = {
-    "threads", "screen", "file", "", "blksz", "sievep", "witnesses"};
+    "threads", "screen", "file", "verbose", "blksz", 
+    "sievep", "witnesses", "numclasses"};
 
 // indication of whether or not an option needs a corresponding argument.
 // needs to be the same length as the above two arrays.
@@ -62,7 +63,7 @@ char LongOptionAliases[NUMOPTIONS][MAXOPTIONLEN] = {
 // 1 = argument required
 // 2 = argument optional
 int needsArg[NUMOPTIONS] = {
-    1,0,2,0,1,1,1};
+    1,0,2,0,1,1,1,1};
 
 // help strings displayed with -h
 // needs to be the same length as the above arrays, even if 
@@ -74,7 +75,8 @@ char OptionHelp[NUMOPTIONS][MAXHELPLEN] = {
     "Verbosity - this option should not have an argument",
     "Blocksize in kB",
     "Upper end of primes to sieve with (default = 0: sieve with all necessary primes)",
-    "Number of witnesses to PRP tests on candidate primes"};
+    "Number of witnesses to PRP tests on candidate primes",
+    "Force number of classes; choose from {2, 8, 48, 96, 480, 960, 5760}"};
 // ========================================================================
 
 // ========================================================================
@@ -135,7 +137,7 @@ void applyOpt(char* opt, char* arg, options_t* options)
         mpz_t sp;
         mpz_init(sp);
         mpz_set_str(sp, arg, 10);
-        if (mpz_cmp_ui(sp, 5000000000ULL) > 0) // 2147483648) > 0)
+        if (mpz_cmp_ui(sp, 2147483648) > 0)
         {
             printf("sieve prime limit must be < 2^31\n");
             exit(0);
@@ -147,6 +149,10 @@ void applyOpt(char* opt, char* arg, options_t* options)
     else if (strcmp(opt, options->OptionArray[6]) == 0)
     {
         options->num_witnesses = atoi(arg);
+    }
+    else if (strcmp(opt, options->OptionArray[7]) == 0)
+    {
+        options->numclasses = atoi(arg);
     }
     else
     {
@@ -209,6 +215,7 @@ options_t* initOpt(void)
     options->outScreen = 0;
     options->blocksize = 32;
     options->num_witnesses = 0;
+    options->numclasses = 0;
     options->sieve_primes_limit = 0;
     // ========================================================================
 

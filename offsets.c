@@ -91,6 +91,8 @@ void get_offsets(thread_soedata_t *thread_data)
 
     uint64_t i, startprime = sdata->startprime, prodN = sdata->prodN, block = 0;
     uint32_t prime, root, bnum;
+    // implement a special case for lowlimit = 0?  
+    // Then lmp[i] + diff = rclass b/c lmp = 1.
     uint32_t diff = sdata->rclass[thread_data->current_line] - 1;
     uint64_t tmp2;
     int s;
@@ -405,6 +407,37 @@ void get_offsets(thread_soedata_t *thread_data)
                     nptr[bnum]++;
                 }
 
+            }
+
+            for (; i < sdata->bitmap_start_id; i++)
+            {
+                prime = sdata->sieve_p[i];
+
+                // condition to see if the current prime only hits the sieve interval once
+                if (prime > sdata->large_bucket_start_prime)
+                {
+                    ddata->largep_offset = i;
+                    break;
+                }
+
+                s = sdata->root[i];
+
+                // we solved for lower_mod_prime while computing the modular inverse of
+                // each prime, for the residue class 1.  add the difference between this
+                // residue class and 1 before multiplying by the modular inverse to find the offset.
+
+                tmp2 = (uint64_t)s * (uint64_t)(lmp[i] + diff);
+                root = (uint32_t)(tmp2 % (uint64_t)prime);
+
+                // It is faster to update during
+                // linesieve than doing it all here in a loop.
+                // measured 6/2016
+                if (root < linesize)
+                {
+                    bnum = (root >> FLAGBITS);
+                    bptr[bnum][nptr[bnum]] = ((uint64_t)prime << 32) | (uint64_t)root;
+                    nptr[bnum]++;
+                }
             }
         }
 

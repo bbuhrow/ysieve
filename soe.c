@@ -66,13 +66,15 @@ void sieve_sync(void *vptr)
         fflush(stdout);
     }
 
-    if (sdata->only_count)
-    {
-        sdata->num_found += t->linecount;
-    }
+    sdata->num_found += t->linecount;
+    //if (sdata->only_count)
+    //{
+    //    sdata->num_found += t->linecount;
+    //}
 
     if (t->ddata.min_sieved_val < sdata->min_sieved_val)
     {
+       
         sdata->min_sieved_val = t->ddata.min_sieved_val;
     }
 
@@ -114,7 +116,7 @@ void sieve_work_fcn(void *vptr)
         // bitmap sieving is enabled then we need to keep all lines
         // in memory at once.
         sieve_line_ptr(t);
-        if (sdata->only_count)
+        //if (sdata->only_count)
             t->linecount = count_line(&t->sdata, t->current_line);
     }   
     else
@@ -975,7 +977,8 @@ void finalize_sieve(soe_staticdata_t *sdata,
 
 		// PRIMES is already sized appropriately by the wrapper
 		// load in the sieve primes that we need
-        //printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
+        printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
+        printf("bucket_start_id = %u\n", sdata->bucket_start_id);
 
 		i = 0;
         if (sdata->VFLAG > 2)

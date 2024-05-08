@@ -81,7 +81,7 @@ void compute_primes_work_fcn(void *vptr)
     }
 
 #if defined(USE_BMI2) || defined(USE_AVX512F)
-    if (sdata->has_bmi2)
+    if ((sdata->has_bmi2) && (sdata->numclasses <= 48))
     {
         for (i = t->startid; i < t->stopid; i += 8)
         {
@@ -159,7 +159,8 @@ uint64_t primes_from_lineflags(soe_staticdata_t *sdata, thread_soedata_t *thread
         if (sdata->sieve_range)
         {
             // then just split the overall range into equal parts
-            memchunk = (sdata->orig_hlimit - sdata->orig_llimit) / sdata->THREADS + sdata->THREADS;
+            memchunk = (uint64_t)((double)(sdata->num_found / sdata->THREADS) * 1.1); 
+            // (sdata->orig_hlimit - sdata->orig_llimit) / sdata->THREADS + sdata->THREADS;
 
             if (sdata->VFLAG > 2)
             {
@@ -301,9 +302,9 @@ uint32_t compute_8_bytes(soe_staticdata_t *sdata,
 	uint32_t pcount, uint64_t *primes, uint64_t byte_offset)
 {
 	uint32_t current_line;
-	// re-ordering queues supporting up to 48 residue classes.
-    uint64_t pqueues[64][48];
-    uint8_t pcounts[64];
+	// re-ordering queues supporting up to 480 residue classes.
+    uint64_t **pqueues; // [64][48]
+    uint32_t pcounts[64];
     int i, j;
 	uint32_t nc = sdata->numclasses;
 	uint64_t lowlimit = sdata->lowlimit;
@@ -323,13 +324,19 @@ uint32_t compute_8_bytes(soe_staticdata_t *sdata,
 		}
 	}
 
+    pqueues = (uint64_t**)xmalloc(64 * sizeof(uint64_t*));
+    for (i = 0; i < 64; i++)
+    {
+        pqueues[i] = (uint64_t*)xmalloc(sdata->numclasses * sizeof(uint64_t));
+    }
+
     // Compute the primes using ctz on the 64-bit words but push the results
     // into 64 different queues depending on the bit position.  Then
     // we pull from the queues in order while storing into the primes array.
     // This time the bottleneck is mostly in the queue-based sorting
     // and associated memory operations, so we don't bother with
     // switching between branch-free inner loops or not.
-    memset(pcounts, 0, 64);
+    memset(pcounts, 0, 64 * sizeof(uint32_t));
 
     lowlimit += byte_offset * 8 * prodN;
     for (current_line = 0; current_line < nc; current_line++)
@@ -364,6 +371,12 @@ uint32_t compute_8_bytes(soe_staticdata_t *sdata,
             primes[GLOBAL_OFFSET + pcount++] = pqueues[i][j];
         }
     }
+
+    for (i = 0; i < 64; i++)
+    {
+        free(pqueues[i]);
+    }
+    free(pqueues);
 
 	return pcount;
 }

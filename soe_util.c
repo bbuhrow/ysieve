@@ -427,8 +427,46 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
 	//printf("Sieve Parameters:\nBLOCKSIZE = %u\nFLAGSIZE = %u\nFLAGBITS = %u\nBUCKETSTARTI = %u\n",
 	//	SOEBLOCKSIZE, FLAGSIZE, FLAGBITS, BUCKETSTARTI);
 
+    // find/experiment with residue classes
+    if (0)
+    {
+        int i, k;
+        k = 0;
+        prodN = 30030;
+        printf("static uint32_t class_inv30030[5760] = {");
+        for (i = 1; i < prodN; i++)
+        {
+            if (gcd_1(i, (uint64_t)prodN) == 1)
+            {
+                printf("%d,", prodN - modinv1(i, prodN));
+                k++;
+                if (k % 10 == 0) printf("\n");
+            }
+        }
+        printf("};\n");
+        printf("%d residue classes for product %d\n", k, prodN);
+        exit(0);
+    }
+
 	//more efficient to sieve using mod210 when the range is big
-	if ((highlimit - lowlimit) > 40000000000ULL)
+    if ((highlimit - lowlimit) > 4000000000000ULL)
+    {
+        //numclasses = 5760;
+        //prodN = 30030;
+        //startprime = 6;
+        numclasses = 960;
+        prodN = 4620;
+        startprime = 5;
+
+#if defined(USE_AVX2)
+
+        if (sdata->has_avx2)
+        {
+            sdata->use_monty = 1;
+        }
+#endif
+    }	
+    else if ((highlimit - lowlimit) > 40000000000ULL)
 	{
         if (lowlimit < 100000000000000ULL)
         {
@@ -483,6 +521,53 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
 		startprime=2;
 	}
 
+    if ((sdata->userclasses > 0) && (sdata->is_main_sieve == 1))
+    {
+        numclasses = sdata->userclasses;
+        switch (numclasses)
+        {
+        case 2:
+            prodN = 6;
+            startprime = 2;
+            break;
+        case 8:
+            prodN = 30;
+            startprime = 3;
+            break;
+        case 48:
+            prodN = 210;
+            startprime = 4;
+            break;
+        case 96:
+            prodN = 420;
+            startprime = 4;
+            break;
+        case 480:
+            prodN = 2310;
+            startprime = 5;
+            break;
+        case 960:
+            prodN = 4620;
+            startprime = 5;
+            break;
+        case 5760:
+            prodN = 30030;
+            startprime = 6;
+            break;
+        default:
+            printf("invalid number of classes, please choose from {2, 8, 48, 96, 480, 960, 5760}\n");
+            exit(0);
+        }
+
+#if defined(USE_AVX2)
+
+        if (sdata->has_avx2)
+        {
+            sdata->use_monty = 1;
+        }
+#endif
+    }
+
 	sdata->numclasses = numclasses;
 	sdata->prodN = prodN;
 	sdata->startprime = startprime;
@@ -502,12 +587,6 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
 	// directly and not via the wrapper...
 	if (highlimit - lowlimit < 1000000)
 		highlimit = lowlimit + 1000000;
-
-	if ((highlimit - lowlimit) > 1000000000000ULL)
-	{
-		printf("range too big\n");
-		return 1;
-	}
 
 	if (highlimit > (0xffffffffffffffffULL - 0xffffffffULL - 1))
 	{
@@ -548,6 +627,8 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
                 break;
             }
 		}
+        if (i == num_sp)
+            i--;
 		sdata->pboundi = i;	
         sdata->pbound = sieve_p[sdata->pboundi - 1];
         //printf("largest needed prime is %u at sieve_p index %d\n", sieve_p[i], i);
@@ -750,14 +831,22 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
 
     // reallocate flag structure for wheel and block sieving.
     // we want the smallest number of blocks such that all integers in the requested
-    // range are represented.  Each block contains 32768 * 8 bit-flags, each of
+    // range are represented.  Each block contains blksz * 8 bit-flags, each of
     // which represents integers spaced 'prodN' apart.
     sdata->blocks = (highlimit - lowlimit) / prodN / sdata->FLAGSIZE;
     if (((highlimit - lowlimit) / prodN) % sdata->FLAGSIZE != 0) sdata->blocks++;
     sdata->numlinebytes = sdata->blocks * sdata->SOEBLOCKSIZE;
     numlinebytes = sdata->numlinebytes;
-    highlimit = (uint64_t)((uint64_t)sdata->numlinebytes * (uint64_t)prodN * (uint64_t)BITSINBYTE + lowlimit);
+    highlimit = (uint64_t)((uint64_t)sdata->numlinebytes * 
+        (uint64_t)prodN * (uint64_t)BITSINBYTE + lowlimit);
     sdata->highlimit = highlimit;
+
+    if (sdata->blocks > (1 << (32 - sdata->FLAGBITS)))
+    {
+        printf("too many blocks (%u)!\nReduce the sieve range\n",
+            sdata->blocks);
+        exit(0);
+    }
 
     // each flag in a block is spaced prodN integers apart.  record the resulting size of the 
     // number line encoded in each block.
@@ -772,7 +861,7 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
 
         // also see if a bitmap sieving step will be beneficial.
         sdata->bitmap_lower_bound = 99999999999999ULL;
-        if (((int)log10(sdata->orig_llimit) - 14) >= 0)
+        if (0) //((int)log10(sdata->orig_llimit) - 14) >= 0)
         {
             sdata->bitmap_start_id = MIN(
                 bitmap_bound_tab[sdata->startprime - 2][(int)log10(sdata->orig_llimit) - 14],
@@ -799,7 +888,7 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
     }
 
     // any prime larger than this will only hit the interval once (in residue space)
-    sdata->large_bucket_start_prime = sdata->blocks * sdata->FLAGSIZE;
+    sdata->large_bucket_start_prime = (uint64_t)sdata->blocks * sdata->FLAGSIZE;
 
     // allocate space for the root of each sieve prime (used by the bucket sieve)
     //sdata->root = (int *)xmalloc_align(sdata->bitmap_start_id * sizeof(int));
@@ -1100,7 +1189,7 @@ uint64_t alloc_threaddata(soe_staticdata_t *sdata, thread_soedata_t *thread_data
         thread->ddata.presieve_scratch = (uint32_t *)xmalloc_align(16 * sizeof(uint32_t));
 
 		// allocate a bound for each block
-        //printf("allocated space for %d blocks in pbounds\n", sdata->blocks);
+        //printf("allocating space for %d blocks in pbounds\n", sdata->blocks);
 		thread->ddata.pbounds = (uint64_t *)malloc(
 			sdata->blocks * sizeof(uint64_t));
 		allocated_bytes += sdata->blocks * sizeof(uint64_t);

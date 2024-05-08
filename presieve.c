@@ -2549,9 +2549,6 @@ void pre_sieve_avx2(soe_dynamicdata_t *ddata, soe_staticdata_t *sdata, uint8_t *
         }
         ddata->offsets[4] = (uint32_t)mask_num;
         ddata->offsets[5] = (uint32_t)mask_num2;
-
-
-
     }
     else if (startprime == 3)
     {
@@ -2585,7 +2582,6 @@ void pre_sieve_avx2(soe_dynamicdata_t *ddata, soe_staticdata_t *sdata, uint8_t *
         }
         ddata->offsets[4] = (uint32_t)mask_num;
         ddata->offsets[5] = (uint32_t)mask_num2;
-
     }
     else if (startprime == 4)
     {
@@ -2608,7 +2604,6 @@ void pre_sieve_avx2(soe_dynamicdata_t *ddata, soe_staticdata_t *sdata, uint8_t *
 
         ddata->offsets[4] = (uint32_t)mask_num;
         ddata->offsets[5] = (uint32_t)mask_num2;
-
     }
     else if (startprime == 5)
     {
