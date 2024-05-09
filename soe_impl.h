@@ -276,6 +276,7 @@ uint64_t alloc_threaddata(soe_staticdata_t* sdata, thread_soedata_t* thread_data
 void do_soe_sieving(soe_staticdata_t* sdata, thread_soedata_t* thread_data, int count);
 void finalize_sieve(soe_staticdata_t* sdata,
     thread_soedata_t* thread_data, int count, uint64_t* primes);
+void trim_line(soe_staticdata_t* sdata, int current_line);
 
 uint32_t modinv1(uint32_t a, uint32_t p);
 uint32_t modinv2(uint32_t a, uint32_t p);

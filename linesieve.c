@@ -2607,7 +2607,7 @@ void sieve_line_avx2_128k(thread_soedata_t *thread_data)
 		// at first glance it looks like AVX2 operations to compute the indices
 		// might be helpful, but since we can't address memory with SIMD registers
 		// it actually isn't.  Things might be different with a scatter operation.
-		stopid = MIN(ddata->pbounds[i], 1901); //22998); // 1901);
+		stopid = MIN(ddata->pbounds[i], 6542); //22998); // 1901);
 		for (; j < stopid; j++)
 		{
 			uint32_t tmpP;
@@ -2685,7 +2685,7 @@ void sieve_line_avx2_128k(thread_soedata_t *thread_data)
 		// unroll the loop: all primes less than this max hit the interval at least 8 times
 		//maxP = 1048576 >> 3;
 
-		stopid = MIN(ddata->pbounds[i], 3513); //43388); // 3513);
+		stopid = MIN(ddata->pbounds[i], 12251); //43388); // 3513);
 		for (; j < stopid; j++)
 		{
 			uint32_t tmpP;
@@ -2725,7 +2725,7 @@ void sieve_line_avx2_128k(thread_soedata_t *thread_data)
 		// unroll the loop: all primes less than this max hit the interval at least 4 times
 		//maxP = 1048576 >> 2;
 
-		stopid = MIN(ddata->pbounds[i], 6543); //82023); // 
+		stopid = MIN(ddata->pbounds[i], 23000); //82023); // 6543
 		for (; j < stopid; j++)
 		{
 			uint32_t tmpP;
@@ -3016,7 +3016,7 @@ void sieve_line_avx2_512k(thread_soedata_t* thread_data)
         // at first glance it looks like AVX2 operations to compute the indices
         // might be helpful, but since we can't address memory with SIMD registers
         // it actually isn't.  Things might be different with a scatter operation.
-        stopid = MIN(ddata->pbounds[i], 1901); //22998); // 1901);
+        stopid = MIN(ddata->pbounds[i], 23000); //22998); // 1901);
         for (; j < stopid; j++)
         {
             uint32_t tmpP;
@@ -3094,7 +3094,7 @@ void sieve_line_avx2_512k(thread_soedata_t* thread_data)
         // unroll the loop: all primes less than this max hit the interval at least 8 times
         //maxP = 4194304 >> 3;
 
-        stopid = MIN(ddata->pbounds[i], 3513); //43388); // 3513);
+        stopid = MIN(ddata->pbounds[i], 43390); //43388); // 3513);
         for (; j < stopid; j++)
         {
             uint32_t tmpP;
@@ -3134,7 +3134,7 @@ void sieve_line_avx2_512k(thread_soedata_t* thread_data)
         // unroll the loop: all primes less than this max hit the interval at least 4 times
         //maxP = 4194304 >> 2;
 
-        stopid = MIN(ddata->pbounds[i], 6543); //82023); // 
+        stopid = MIN(ddata->pbounds[i], 82025); //82023); // 6543
         for (; j < stopid; j++)
         {
             uint32_t tmpP;
@@ -3238,14 +3238,14 @@ void sieve_line_avx2_512k(thread_soedata_t* thread_data)
                 cmp1 = _mm256_movemask_epi8(vt1);
                 cmp2 = _mm256_movemask_epi8(vt2);
 
-                if (cmp1 & 0x1) { BUCKET_UPDATE2(0, 20) }
-                if (cmp1 & 0x0100) { BUCKET_UPDATE2(1, 20) }
-                if (cmp1 & 0x010000) { BUCKET_UPDATE2(2, 20) }
-                if (cmp1 & 0x01000000) { BUCKET_UPDATE2(3, 20) }
-                if (cmp2 & 0x01) { BUCKET_UPDATE2(4, 20) }
-                if (cmp2 & 0x0100) { BUCKET_UPDATE2(5, 20) }
-                if (cmp2 & 0x010000) { BUCKET_UPDATE2(6, 20) }
-                if (cmp2 & 0x01000000) { BUCKET_UPDATE2(7, 20) }
+                if (cmp1 & 0x1) { BUCKET_UPDATE2(0, 22) }
+                if (cmp1 & 0x0100) { BUCKET_UPDATE2(1, 22) }
+                if (cmp1 & 0x010000) { BUCKET_UPDATE2(2, 22) }
+                if (cmp1 & 0x01000000) { BUCKET_UPDATE2(3, 22) }
+                if (cmp2 & 0x01) { BUCKET_UPDATE2(4, 22) }
+                if (cmp2 & 0x0100) { BUCKET_UPDATE2(5, 22) }
+                if (cmp2 & 0x010000) { BUCKET_UPDATE2(6, 22) }
+                if (cmp2 & 0x01000000) { BUCKET_UPDATE2(7, 22) }
             }
 
             //finish up those that didn't fit into a group of 8 hits
@@ -3256,7 +3256,7 @@ void sieve_line_avx2_512k(thread_soedata_t* thread_data)
                 bptr[j] += (bptr[j] >> 32);
                 if ((uint32_t)bptr[j] < linesize)
                 {
-                    bnum = ((uint32_t)bptr[j] >> 20);
+                    bnum = ((uint32_t)bptr[j] >> 22);
                     buckets[bnum][nptr[bnum]] = bptr[j];
                     nptr[bnum]++;
                 }

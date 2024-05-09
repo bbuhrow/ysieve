@@ -81,7 +81,7 @@ void compute_primes_work_fcn(void *vptr)
     }
 
 #if defined(USE_BMI2) || defined(USE_AVX512F)
-    if ((sdata->has_bmi2) && (sdata->numclasses <= 48))
+    if ((sdata->has_bmi2) && (sdata->numclasses <= 48) && (!(sdata->analysis > 1)))
     {
         for (i = t->startid; i < t->stopid; i += 8)
         {
@@ -90,9 +90,85 @@ void compute_primes_work_fcn(void *vptr)
     }
     else
     {
+        // if we don't have BMI2, or numclasses > 48, or we're doing a more
+        // complicated analysis, then we should end up here.
         for (i = t->startid; i < t->stopid; i += 8)
         {
             t->linecount = compute_8_bytes(sdata, t->linecount, t->ddata.primes, i);
+
+            // if searching for prime constellations, then we need to look at the last 
+            // flags of this block of 8 bytes and the first flags of the next one.
+            // we do this by loading the trailing bits of this block into a carry
+            // register.  The rest is handled by the block analysis function.
+            // For the first block in a multi-threaded run, we should also
+            // be receiving carry data from the previous thread in order to
+            // maintain continuity across threads.
+            
+            //t->ddata.analysis_carry_data[0] = 0;
+            if (0) //(sdata->analysis > 1) && (sdata->is_main_sieve == 1))
+            {
+                uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
+                uint8_t lastflag = lastline[i + 7] & 0x80;
+
+                if (lastflag)
+                {
+                    uint64_t lowlimit = sdata->lowlimit + i * 8 * sdata->prodN;
+                    uint64_t prime = lowlimit + 63 * sdata->prodN + sdata->rclass[sdata->numclasses - 1];
+
+                    if ((prime >= sdata->orig_llimit) && (prime <= sdata->orig_hlimit))
+                    {
+                        t->ddata.analysis_carry_data[0] = 1; // twin only
+                    }
+                }
+            }
+
+            if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
+            {
+                uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
+                uint8_t* firstline = sdata->lines[0];
+
+                if ((i + 8) < t->stopid)
+                {
+                    uint8_t lastflag = lastline[i + 7] & 0x80;
+                    uint8_t firstflag = firstline[i + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        uint64_t lowlimit = sdata->lowlimit + i * 8 * sdata->prodN;
+                        uint64_t prime = lowlimit + 63 * sdata->prodN + sdata->rclass[sdata->numclasses - 1];
+
+                        lowlimit = sdata->lowlimit + (i + 8) * 8 * sdata->prodN;
+                        uint64_t p2 = lowlimit + 0 * sdata->prodN + sdata->rclass[0];
+                        
+                        if ((prime >= sdata->orig_llimit) && (prime <= sdata->orig_hlimit))
+                        {
+                            t->ddata.primes[sdata->GLOBAL_OFFSET + t->linecount++] = prime;
+                        }
+                    }
+                }
+                else if ((i + 8) < sdata->numlinebytes)
+                {
+                    // this thread is done but if there is more data after
+                    // this thread's chunk then check between thread boundaries.
+                    uint8_t lastflag = lastline[i + 7] & 0x80;
+                    uint8_t firstflag = firstline[i + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        uint64_t lowlimit = sdata->lowlimit + i * 8 * sdata->prodN;
+                        uint64_t prime = lowlimit + 63 * sdata->prodN + sdata->rclass[sdata->numclasses - 1];
+
+                        lowlimit = sdata->lowlimit + (i + 8) * 8 * sdata->prodN;
+                        uint64_t p2 = lowlimit + 0 * sdata->prodN + sdata->rclass[0];
+
+                        if ((prime >= sdata->orig_llimit) && (prime <= sdata->orig_hlimit))
+                        {
+                            //printf("found twin %lu between threads\n", prime);
+                            t->ddata.primes[sdata->GLOBAL_OFFSET + t->linecount++] = prime;
+                        }
+                    }
+                }
+            }
         }
     }
 #else
@@ -104,7 +180,6 @@ void compute_primes_work_fcn(void *vptr)
 
     return;
 }
-
 
 uint64_t primes_from_lineflags(soe_staticdata_t *sdata, thread_soedata_t *thread_data,
 	uint32_t start_count, uint64_t *primes)
@@ -134,7 +209,11 @@ uint64_t primes_from_lineflags(soe_staticdata_t *sdata, thread_soedata_t *thread
 	range -= (range % 32);
 	lastid = 0;
 
-    // divvy up the line bytes
+    printf("computing primes from %lu to %lu\n", sdata->orig_llimit, sdata->orig_hlimit);
+
+    // divvy up the line bytes.  Unlike when counting primes,
+    // here threading is by groups of bytes, over all classes.
+    // this is necessary to order the primes.
     for (i = 0; i < sdata->THREADS; i++)
     {
         thread_soedata_t *t = thread_data + i;
@@ -160,7 +239,6 @@ uint64_t primes_from_lineflags(soe_staticdata_t *sdata, thread_soedata_t *thread
         {
             // then just split the overall range into equal parts
             memchunk = (uint64_t)((double)(sdata->num_found / sdata->THREADS) * 1.1); 
-            // (sdata->orig_hlimit - sdata->orig_llimit) / sdata->THREADS + sdata->THREADS;
 
             if (sdata->VFLAG > 2)
             {
@@ -302,7 +380,7 @@ uint32_t compute_8_bytes(soe_staticdata_t *sdata,
 	uint32_t pcount, uint64_t *primes, uint64_t byte_offset)
 {
 	uint32_t current_line;
-	// re-ordering queues supporting up to 480 residue classes.
+	// re-ordering queues supporting arbitrary residue classes.
     uint64_t **pqueues; // [64][48]
     uint32_t pcounts[64];
     int i, j;
@@ -360,15 +438,71 @@ uint32_t compute_8_bytes(soe_staticdata_t *sdata,
 
     for (i = 0; i < 64; i++)
     {
-        for (j = 0; j < pcounts[i] / 2; j++)
+        if ((sdata->analysis == 1) || (sdata->is_main_sieve == 0))
         {
-            __m128i t = _mm_loadu_si128((__m128i *)(&pqueues[i][j * 2]));
-            _mm_storeu_si128((__m128i *)(&primes[GLOBAL_OFFSET + pcount]), t);
-            pcount += 2;
+            // now we can traverse the queues in order and
+            // copy into the main prime array.
+            for (j = 0; j < pcounts[i] / 2; j++)
+            {
+                __m128i t = _mm_loadu_si128((__m128i*)(&pqueues[i][j * 2]));
+                _mm_storeu_si128((__m128i*)(&primes[GLOBAL_OFFSET + pcount]), t);
+                pcount += 2;
+            }
+            for (j *= 2; j < pcounts[i]; j++)
+            {
+                primes[GLOBAL_OFFSET + pcount++] = pqueues[i][j];
+            }
         }
-        for (j *= 2; j < pcounts[i]; j++)
+        else if (sdata->analysis == 2)
         {
-            primes[GLOBAL_OFFSET + pcount++] = pqueues[i][j];
+            // search for twins and only load the leading element/prime.
+            // if depth-based sieving then these are candidate twins.
+            if (pcounts[i] > 0)
+            {
+                //if ((i == 0) && (sdata->analysis_carry_data[0] > 0))
+                //{
+                //    uint64_t llimit = sdata->lowlimit + (byte_offset - 8) * 8 * sdata->prodN;
+                //    uint64_t prevprime = llimit + 63 * sdata->prodN + 
+                //        sdata->rclass[sdata->numclasses - 1];
+                //
+                //    if ((pqueues[i][0] - prevprime) == 2)
+                //    {
+                //        primes[GLOBAL_OFFSET + pcount++] = prevprime;
+                //    }
+                //}
+                for (j = 0; j < pcounts[i] - 1; j++)
+                {
+                    if ((pqueues[i][j + 1] - pqueues[i][j]) == 2)
+                    {
+                        primes[GLOBAL_OFFSET + pcount++] = pqueues[i][j];
+                    }
+                }
+                if (i < 63)
+                {
+                    if (pcounts[i + 1] > 0)
+                    {
+                        if ((pqueues[i + 1][0] - pqueues[i][j]) == 2)
+                        {
+                            primes[GLOBAL_OFFSET + pcount++] = pqueues[i][j];
+                        }
+                    }
+                }
+            }
+        }
+        else if (sdata->analysis == 3)
+        {
+            // search for gaps and only load the leading element/prime.
+            // if depth-based sieving then these are candidate gaps.
+            for (j = 0; j < pcounts[i] / 2; j++)
+            {
+                __m128i t = _mm_loadu_si128((__m128i*)(&pqueues[i][j * 2]));
+                _mm_storeu_si128((__m128i*)(&primes[GLOBAL_OFFSET + pcount]), t);
+                pcount += 2;
+            }
+            for (j *= 2; j < pcounts[i]; j++)
+            {
+                primes[GLOBAL_OFFSET + pcount++] = pqueues[i][j];
+            }
         }
     }
 

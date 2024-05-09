@@ -72,6 +72,7 @@ typedef struct
 	int userclasses;
 	uint32_t *sieve_p;
     uint32_t num_sp;
+	uint32_t alloc_sp;
 	int *root;
 	uint32_t *lower_mod_prime;
 
@@ -111,6 +112,9 @@ typedef struct
 	int **bitmap_ptrs;
 #endif
 	int only_count;
+	int analysis;		// 1 == compute all primes, 2 == twins, 3 == gaps
+	int gapmin;			// minimum gap size to search for with analysis=3;
+	int primeconst;		// prime constellation size to search for (default 2 == twins)
 	mpz_t *offset;
 	int sieve_range;
 	uint64_t min_sieved_val;
@@ -174,6 +178,8 @@ typedef struct
 
     // presieving stuff
     uint32_t *presieve_scratch;
+
+	uint8_t* analysis_carry_data;		// data to bridge between analysis boundaries
 
 } soe_dynamicdata_t;
 

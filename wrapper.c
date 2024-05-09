@@ -79,7 +79,18 @@ void compute_prps_work_fcn(void *vptr)
             //if (mpz_extrastrongbpsw_prp(t->tmpz))
             if (mpz_probab_prime_p(t->tmpz, witnesses))
             {
-                t->ddata.primes[t->linecount++] = t->ddata.primes[i - t->startid];
+				if (sdata->analysis == 2)
+				{
+					mpz_add_ui(t->tmpz, t->tmpz, 2);
+					if (mpz_probab_prime_p(t->tmpz, sdata->witnesses))
+					{
+						t->ddata.primes[t->linecount++] = t->ddata.primes[i - t->startid];
+					}
+				}
+				else
+				{
+					t->ddata.primes[t->linecount++] = t->ddata.primes[i - t->startid];
+				}
 				//printf("prime!\n");
             }
 			else
@@ -375,10 +386,25 @@ uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highl
 			{
 				for (i = 0; i < *num_p; i++)
 				{
-                    if ((primes[i] >= lowlimit) && (primes[i] <= highlimit))
-                    {
-                        fprintf(out, "%" PRIu64 "\n", primes[i]);
-                    }
+					if (sdata->analysis == 1)
+					{
+						if ((primes[i] >= lowlimit) && (primes[i] <= highlimit))
+						{
+							fprintf(out, "%" PRIu64 "\n", primes[i]);
+						}
+					}
+					else if (sdata->analysis == 2)
+					{
+						if ((primes[i] >= lowlimit) && (primes[i] <= highlimit))
+						{
+							fprintf(out, "(%" PRIu64 ", %" PRIu64 ")\n", 
+								primes[i], primes[i] + 2);
+						}
+						else
+						{
+							printf("out of bounds prime %lu found in list\n", primes[i]);
+						}
+					}
 				}
 				fclose(out);
 			}
@@ -410,7 +436,7 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 	// that survive.  Basically, it is just the sieve, but with no
 	// guareentees that what survives the sieving is prime.  The idea is to 
 	// remove cheap composites.
-	uint64_t retval, i, range, tmpl, tmph;
+	uint64_t retval, i, range, tmpl, tmph, num_sp_needed;
 	uint64_t *values = NULL;
 	mpz_t tmpz;
 	mpz_t *offset;
@@ -431,46 +457,64 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 
 	// sieve with the range requested, down to a minimum of 1000.
 	// (so that we don't run into issues with the presieve.)
-	if ((sieve_limit + 256) < sdata->sieve_p[sdata->num_sp - 1])
+	if ((sieve_limit + 10000) < sdata->sieve_p[sdata->num_sp - 1])
 	{
 		// if the seed primes we were provided are enough then
 		// just use them
 	}
 	else
 	{
-		//then we need to generate more sieving primes
+		// then we need to generate more sieving primes
 		uint32_t range_est;
 
-		//allocate array based on conservative estimate of the number of 
-		//primes in the interval	
-		range_est = (uint32_t)estimate_primes_in_range(0, sieve_limit + 256);
+		// allocate array based on conservative estimate of the number of 
+		// primes in the interval	
+		range_est = (uint32_t)estimate_primes_in_range(0, sieve_limit + 10000);
 
 		if (sdata->VFLAG > 1)
 		{
-			printf("generating more sieving primes in range 0 : %u \n", sieve_limit + 256);
+			printf("generating more sieving primes in range 0 : %u \n", sieve_limit);
 			printf("allocating %u bytes \n", range_est);
 		}
 
 		sdata->sieve_p = (uint32_t*)xrealloc(sdata->sieve_p,
 			(size_t)(range_est * sizeof(uint32_t)));
 
-		//find the sieving primes using the seed primes
+		// find the sieving primes using the seed primes.
+		// we find slightly more than we have been requested to use,
+		// because the vector routines in the sieve may want to slightly 
+		// increase the number that we sieve with in order to work
+		// with full vectors.
 		sdata->NO_STORE = 0;
 		sdata->is_main_sieve = 0;
-		uint64_t *primes = GetPRIMESRange(sdata, NULL, 0, sieve_limit + 256, &retval);
+		uint64_t *primes = GetPRIMESRange(sdata, NULL, 0, sieve_limit + 10000, &retval);
+
+		printf("primes found: %lu, max = %u\n", retval, primes[retval - 1]);
+		// from the oversieved list of primes, find how many will satisfy the 
+		// requested sieve_primes limit.
+		num_sp_needed = retval - 1;
+		while (primes[num_sp_needed] > sieve_limit)
+		{
+			num_sp_needed--;
+		}
+		num_sp_needed++;
 
 		if (sdata->VFLAG > 1)
 		{
-			printf("found %u sieving primes\n", (uint32_t)retval);
+			printf("found %u sieving primes, max prime = %u\n", 
+				(uint32_t)num_sp_needed, primes[num_sp_needed - 1]);
 		}
 
+		// copy over all the primes
 		sdata->sieve_p = (uint32_t*)xrealloc(sdata->sieve_p, retval * sizeof(uint32_t));
 		for (i = 0; i < retval; i++)
 		{
 			sdata->sieve_p[i] = (uint32_t)primes[i];
 		}
 
-		sdata->num_sp = (uint32_t)retval;
+		// but list the number needed, which should be slightly smaller than those found.
+		sdata->num_sp = (uint32_t)num_sp_needed;
+		sdata->alloc_sp = retval;
 		free(primes);
 		primes = NULL;
 	}
@@ -623,7 +667,18 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 						//if (mpz_extrastrongbpsw_prp(t->tmpz))
 						if (mpz_probab_prime_p(tmpz, sdata->witnesses))
 						{
-							values[retval++] = values[i];
+							if (sdata->analysis == 2)
+							{
+								mpz_add_ui(tmpz, tmpz, 2);
+								if (mpz_probab_prime_p(tmpz, sdata->witnesses))
+								{
+									values[retval++] = values[i];
+								}
+							}
+							else
+							{
+								values[retval++] = values[i];
+							}
 							//printf("prime!\n");
 						}
 						else

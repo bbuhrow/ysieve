@@ -79,7 +79,8 @@ int main(int argc, char** argv)
         haveFile = 0;
     }
 
-    if (options->outScreen || haveFile)
+    if (options->outScreen || haveFile || (options->num_witnesses > 0) ||
+        (options->analysis_type > 0))
     {
         count = 0;
     }
@@ -91,6 +92,8 @@ int main(int argc, char** argv)
     sdata = soe_init(options->verbosity, options->threads, options->blocksize);
     sdata->witnesses = options->num_witnesses;
     sdata->userclasses = options->numclasses;
+    sdata->analysis = options->analysis_type;
+    sdata->gapmin = options->gapmin;
 
     gettimeofday(&tstart, NULL);
     
@@ -134,7 +137,7 @@ int main(int argc, char** argv)
         t = ytools_difftime(&tstart, &tstop);
         printf("Elapsed time    : %1.6f seconds\n", t);
     }
-    
+
     soe_finalize(sdata);
     free(startStr);
     free(stopStr);

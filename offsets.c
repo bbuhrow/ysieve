@@ -182,7 +182,6 @@ void get_offsets(thread_soedata_t *thread_data)
         mpz_add_ui(sqrtz, sqrtz, sdata->blk_r);
         mpz_sqrt(sqrtz, sqrtz);
         mpz_add_ui(sqrtz, sqrtz, 1);
-        //mpz_set_ui(tmpz, ddata->lblk_b);
 
         // if we're sieving with an offset, use all of the primes for each block
         // and just find the offset into the first block

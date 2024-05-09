@@ -607,6 +607,12 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
 		//see if we were provided enough primes to do the job
         sdata->pbound = (uint64_t)mpz_get_ui(h);
 
+        if (sdata->VFLAG > 2)
+        {
+            printf("checking if provided primes > sqrt(%lu) = %lu\n",
+                highlimit, sdata->pbound);
+        }
+
         mpz_clear(h);
 
 		if (sieve_p[num_sp - 1] < sdata->pbound)
@@ -631,7 +637,12 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
             i--;
 		sdata->pboundi = i;	
         sdata->pbound = sieve_p[sdata->pboundi - 1];
-        //printf("largest needed prime is %u at sieve_p index %d\n", sieve_p[i], i);
+
+        if (sdata->VFLAG > 2)
+        {
+            printf("largest needed prime is %u at sieve_p index %d\n",
+                sdata->pbound, sdata->pboundi);
+        }
 
 #ifdef USE_AVX2
         // plus perhaps a few extra to get us to a convienient vector boundary.
@@ -655,7 +666,11 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
             sdata->pboundi++;
         }
 
-        //printf("pboundi is now %lu and maxp is %u\n", sdata->pboundi, sieve_p[sdata->pboundi - 1]);
+        if (sdata->VFLAG > 2)
+        {
+            printf("after vector padding, prime bound is now %lu and maxp is %u\n",
+                sdata->pboundi, sieve_p[sdata->pboundi - 1]);
+        }
 
 #endif
 		
@@ -664,32 +679,11 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
 	}
 	else
 	{
-		// for ranges with offsets, don't worry if we don't have enough
-		// primes, but still check to see if we have too many.
-		mpz_t tmpz;
-
-		mpz_init(tmpz);
-		mpz_add_ui(tmpz, offset, highlimit);
-		mpz_sqrt(tmpz, tmpz);
-
-		if (mpz_cmp_ui(tmpz, sieve_p[num_sp - 1]) < 0)
-		{
-			// then we were passed too many.  truncate the input list.
-			sdata->pbound = mpz_get_ui(tmpz);
-			for (i=0; i<num_sp; i++)
-			{
-				// stop when we have enough for this input
-				if (sieve_p[i] > sdata->pbound)
-					break;
-			}
-			sdata->pboundi = i;	
-		}
-		else
-		{
-			// use all of 'em.
-			sdata->pbound = sieve_p[num_sp - 1];
-			sdata->pboundi = num_sp;
-		}
+		// for ranges with offsets we just use the sieve primes that were 
+        // passed in.  The sieve_to_depth wrapper should give us
+        // enough to pad slightly to fill the vector.
+        sdata->pbound = sieve_p[num_sp - 1];
+        sdata->pboundi = num_sp;
 
 #ifdef USE_AVX2
         // plus perhaps a few extra to get us to a convienient vector boundary.
@@ -701,21 +695,26 @@ int check_input(uint64_t highlimit, uint64_t lowlimit, uint32_t num_sp, uint32_t
         // to be grown if necessary.
         while (sdata->pboundi & 7)
         {
-            if (sdata->pboundi == num_sp)
+            if (sdata->pboundi == sdata->alloc_sp)
             {
                 sdata->sieve_p = (uint32_t*)xrealloc(sdata->sieve_p, (num_sp + 8) * sizeof(uint32_t));
                 for (i = 0; i < 8; i++)
                 {
                     sdata->sieve_p[num_sp + i] = sdata->sieve_p[num_sp - 1] + i;
                 }
-                sdata->num_sp = num_sp + 8;
+                sdata->alloc_sp = sdata->alloc_sp + 8;
             }
             sdata->pboundi++;
+        }
+
+        if (sdata->VFLAG > 2)
+        {
+            printf("after vector padding, prime bound is now %lu and maxp is %u\n",
+                sdata->pboundi, sieve_p[sdata->pboundi - 1]);
         }
 #endif
 
 		sdata->offset = offset;
-		mpz_clear(tmpz);
 		sdata->sieve_range = 1;
 	}
 
@@ -805,27 +804,28 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
         mpz_init(tmpz);
         mpz_init(tmpz2);
 
-        //the start of the range of interest is controlled by offset, not lowlimit
-        //figure out how it needs to change to accomodate sieving
+        // the start of the range of interest is controlled by offset, not lowlimit
+        // figure out how it needs to change to accomodate sieving
         mpz_tdiv_q_ui(tmpz, *sdata->offset, numclasses * prodN);
         mpz_mul_ui(tmpz, tmpz, numclasses * prodN);
         mpz_sub(tmpz2, *sdata->offset, tmpz);
 
-        //raise the high limit by the amount the offset was lowered, so that
-        //we allocate enough flags to cover the range of interest
+        // raise the high limit by the amount the offset was lowered, so that
+        // we allocate enough flags to cover the range of interest
         highlimit += mpz_get_ui(tmpz2);
         sdata->orig_hlimit += mpz_get_ui(tmpz2);
 
-        //also raise the original lowlimit so that we don't include sieve primes
-        //that we shouldn't when finalizing the process.
+        // modify the original lowlimit by the amount we need to lower the 
+        // input offset (start of the requested range).  This is the way we
+        // recover the original offset.
         sdata->orig_llimit += mpz_get_ui(tmpz2);
 
-        //copy the new value to the pointer, which will get passed back to sieve_to_depth
+        // copy the new value to the pointer, which will get passed back to sieve_to_depth
         mpz_set(*sdata->offset, tmpz);
         mpz_clear(tmpz);
         mpz_clear(tmpz2);
 
-        //set the lowlimit to 0; the real start of the range is controlled by offset
+        // set the lowlimit to 0; the real start of the range is controlled by offset
         sdata->lowlimit = 0;
     }
 
@@ -1185,6 +1185,19 @@ uint64_t alloc_threaddata(soe_staticdata_t *sdata, thread_soedata_t *thread_data
 	{
 		thread_soedata_t *thread = thread_data + i;
 
+        if (sdata->analysis > 1)
+        {
+            thread->ddata.analysis_carry_data =
+                (uint8_t*)xmalloc((sdata->analysis / 8 + 1) * sizeof(uint8_t));
+        }
+
+        if (sdata->gapmin > 0)
+        {
+            sdata->analysis = 1;
+            thread->ddata.analysis_carry_data =
+                (uint8_t*)xmalloc((sdata->gapmin / 8 + 1) * sizeof(uint8_t));
+        }
+
         // presieving scratch space
         thread->ddata.presieve_scratch = (uint32_t *)xmalloc_align(16 * sizeof(uint32_t));
 
@@ -1367,5 +1380,82 @@ uint64_t alloc_threaddata(soe_staticdata_t *sdata, thread_soedata_t *thread_data
 	}
 
 	return allocated_bytes;
+}
+
+void trim_line(soe_staticdata_t *sdata, int current_line)
+{
+    uint32_t prodN = sdata->prodN;
+    uint64_t lowlimit = sdata->lowlimit;
+    uint8_t* masks = sdata->masks;
+    uint8_t* nmasks = sdata->nmasks;
+    uint64_t numlinebytes = sdata->numlinebytes;
+
+    uint8_t* line = sdata->lines[current_line];
+    uint8_t* flagblock = line;
+    // process 256 bits at a time by using Warren's algorithm (the same
+    // one that non-simd code uses, below) to compute the popcount
+    // for four 64-bit words simultaneously.
+    //for (i = 0; i < (numlinebytes >> 5); i+=2)
+    uint64_t numchunks = (sdata->orig_hlimit - lowlimit) / (512 * prodN) + 1;
+
+    //printf("Warren's algorithm processing through flag %lu, integer %lu\n",
+    //	numchunks * 512, numchunks * 512 * prodN + sdata->rclass[current_line]);
+
+    // zero out full bytes between the last chunk and the original
+    // range limit.
+    uint64_t num = lowlimit + numchunks * 512 * prodN + sdata->rclass[current_line] - 8 * prodN;
+    uint32_t i = numchunks * 512 / 8 - 1;
+
+    //printf("zeroing flag bytes from %lu (index %lu)", num + 8 * prodN, i + 1);
+    while (num > sdata->orig_hlimit)
+    {
+        flagblock[i] = 0;
+        num -= 8 * prodN;
+        i--;
+    }
+    i++;
+    num += 8 * prodN;
+    //printf("to %lu (index %lu)\n", num, i);
+
+    // zero out individual bits between the last chunk and the original
+    // range limit.
+    i *= 8;
+
+    //printf("zeroing flag bits from %lu (index %lu)", num, i);
+
+    while (num > sdata->orig_hlimit)
+    {
+        flagblock[i >> 3] &= masks[i & 7];
+        num -= prodN;
+        i--;
+    }
+
+    //printf("to %lu (index %lu)\n", num, i);
+
+    int done = 0;
+    int ix, kx;
+    for (ix = 0; ix < numlinebytes && !done; ix++)
+    {
+        for (kx = 0; kx < 8; kx++)
+        {
+            if (line[ix] & nmasks[kx])
+            {
+                uint64_t prime = prodN * ((uint64_t)ix * (uint64_t)BITSINBYTE + (uint64_t)kx) +
+                    (uint64_t)sdata->rclass[current_line] + lowlimit;
+                    
+                if (prime < sdata->orig_llimit)
+                {
+                    line[ix] &= masks[kx];
+                }
+                else
+                {
+                    done = 1;
+                    break;
+                }
+            }
+        }
+    }
+    
+    return;
 }
 

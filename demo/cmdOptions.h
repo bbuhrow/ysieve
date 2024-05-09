@@ -40,7 +40,7 @@ extern "C" {
 #include <stdint.h>
 
 // the number of recognized command line options
-#define NUMOPTIONS 8
+#define NUMOPTIONS 10
 // maximum length of command line option strings
 #define MAXOPTIONLEN 20
 // maximum length of help string for each option
@@ -90,6 +90,8 @@ typedef struct
     int blocksize;
     int num_witnesses;
     int numclasses;
+    int analysis_type;
+    int gapmin;
     uint32_t sieve_primes_limit;
     // ========================================================================
 

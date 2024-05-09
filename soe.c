@@ -116,14 +116,15 @@ void sieve_work_fcn(void *vptr)
         // bitmap sieving is enabled then we need to keep all lines
         // in memory at once.
         sieve_line_ptr(t);
-        //if (sdata->only_count)
-            t->linecount = count_line(&t->sdata, t->current_line);
+        trim_line(sdata, t->current_line);
+        t->linecount = count_line(&t->sdata, t->current_line);
     }   
     else
     {
         t->sdata.lines[t->current_line] =
             (uint8_t *)xmalloc_align(t->sdata.numlinebytes * sizeof(uint8_t));
         sieve_line_ptr(t);
+        trim_line(sdata, t->current_line);
         t->linecount = count_line(&t->sdata, t->current_line);
         align_free(t->sdata.lines[t->current_line]);        
     }
@@ -504,19 +505,27 @@ uint64_t spSOE(soe_staticdata_t *sdata, mpz_t *offset,
 	{	
         char strfeatures[80];
 
-		printf("finding requested range %" PRIu64 " to %" PRIu64 "\n",
-            sdata->orig_llimit,sdata->orig_hlimit);
-		printf("sieving range %" PRIu64 " to %" PRIu64 "\n",
-            sdata->lowlimit,*highlimit);
-		printf("using %" PRIu64 " primes, max prime = %" PRIu64 "  \n", 
-            sdata->pboundi,sdata->sieve_p[sdata->pboundi - 1]);
-        //printf("last 1k primes:");
-        //int i;
-        //for (i = 0; i < 1000; i++)
-        //{
-        //    if ((i % 4) == 0) printf("\n");
-        //    printf("%u ", sdata->sieve_p[sdata->num_sp - 1000 + i]);
-        //}
+        if (sdata->sieve_range == 0)
+        {
+            // normal sieve
+            printf("finding requested range %" PRIu64 " to %" PRIu64 "\n",
+                sdata->orig_llimit, sdata->orig_hlimit);
+            printf("sieving range %" PRIu64 " to %" PRIu64 "\n",
+                sdata->lowlimit, *highlimit);
+            printf("using %" PRIu64 " primes, max prime = %" PRIu64 "  \n",
+                sdata->pboundi, sdata->sieve_p[sdata->pboundi - 1]);
+        }
+        else
+        {
+            // sieve to depth - not guarenteed to find all primes
+            gmp_printf("sieving range 0 to %" PRIu64 " from offset %Zd\n", 
+                *highlimit, *sdata->offset);
+            gmp_printf("requested range is %Zd + %lu:%lu\n",
+                *sdata->offset, sdata->orig_llimit, sdata->orig_hlimit);
+            printf("using %" PRIu64 " primes, max prime = %" PRIu64 "  \n",
+                sdata->pboundi, sdata->sieve_p[sdata->pboundi - 1]);
+        }
+
 		printf("using %u residue classes\n",sdata->numclasses);
 
         if (sdata->use_monty)
@@ -944,6 +953,8 @@ void finalize_sieve(soe_staticdata_t *sdata,
 {
 	uint64_t i, j = 0, num_p = sdata->num_found;
 
+    
+
 	if (count)
 	{
 		//add in relevant sieving primes not captured in the flag arrays
@@ -951,8 +962,17 @@ void finalize_sieve(soe_staticdata_t *sdata,
 
 		if (sdata->sieve_range)
 		{
-			if (mpz_size(*sdata->offset) == 1)
-				ui_offset = mpz_get_ui(*sdata->offset);
+            if (mpz_size(*sdata->offset) == 1)
+            {
+                ui_offset = mpz_get_ui(*sdata->offset);
+
+                if (ui_offset > sdata->pbound)
+                {
+                    // huge offset, we don't need to add any primes.
+                    ui_offset = 0;
+                    sdata->min_sieved_val = 0;
+                }
+            }
 			else
 			{
 				// huge offset, we don't need to add any primes.
@@ -977,13 +997,13 @@ void finalize_sieve(soe_staticdata_t *sdata,
 
 		// PRIMES is already sized appropriately by the wrapper
 		// load in the sieve primes that we need
-        printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
-        printf("bucket_start_id = %u\n", sdata->bucket_start_id);
+        // printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
+        // printf("bucket_start_id = %u\n", sdata->bucket_start_id);
 
 		i = 0;
         if (sdata->VFLAG > 2)
         {
-            printf("adding sieve primes to count\n");
+            printf("adding sieve primes to count as needed\n");
         }
 		while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
 		{
@@ -1012,8 +1032,16 @@ void finalize_sieve(soe_staticdata_t *sdata,
 			
 		if (sdata->sieve_range)
 		{
-			if (mpz_size(*sdata->offset) == 1)
-				ui_offset = mpz_get_ui(*sdata->offset);
+            if (mpz_size(*sdata->offset) == 1)
+            {
+                ui_offset = mpz_get_ui(*sdata->offset);
+                if (ui_offset > sdata->pbound)
+                {
+                    // huge offset, we don't need to add any primes.
+                    ui_offset = 0;
+                    sdata->min_sieved_val = 0;
+                }
+            }
 			else
 			{
 				// huge offset, we don't need to add any primes.
@@ -1021,22 +1049,42 @@ void finalize_sieve(soe_staticdata_t *sdata,
 				sdata->min_sieved_val = 0;
 			}
 		}
-		else
-			ui_offset = 0;
+        else
+        {
+            ui_offset = 0;
+        }
 			
-		if (sdata->sieve_range)
-			sdata->min_sieved_val += ui_offset;
+        if (sdata->sieve_range)
+        {
+            sdata->min_sieved_val += ui_offset;
+        }
+
+        if (sdata->VFLAG > 2)
+        {
+            printf("num_found by main sieve = %lu\n", num_p);
+        }
 
 		// PRIMES is already sized appropriately by the wrapper
 		// load in the sieve primes that we need
 		j = 0;
 		i = 0;
+        if (sdata->VFLAG > 2)
+        {
+            printf("adding sieve primes as needed\n");
+        }
 		while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
 		{
+            // if we are doing twin prime or prime gap analysis 
+            // then this needs updating... when the range includes 
+            // sieve primes.
 			if (sdata->sieve_p[i] >= (sdata->orig_llimit + ui_offset))					
 				primes[j++] = (uint64_t)sdata->sieve_p[i];
 			i++;
 		}
+        if (sdata->VFLAG > 2)
+        {
+            printf("num_found total = %lu\n", num_p);
+        }
 
 		//and then the primes in the lines
 		num_p = primes_from_lineflags(sdata, thread_data, j, primes);
@@ -1050,6 +1098,10 @@ void finalize_sieve(soe_staticdata_t *sdata,
     {
         thread_soedata_t* thread = thread_data + i;
         free(thread->ddata.pbounds);
+        if ((sdata->analysis > 1) || (sdata->gapmin > 0))
+        {
+            free(thread->ddata.analysis_carry_data);
+        }
         align_free(thread->ddata.presieve_scratch);
     }
 
