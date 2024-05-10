@@ -355,7 +355,7 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
         sdata->BUCKETSTARTI = 33336;
 
         // the avx2 version is faster on avx512 capable cpus...
-#ifdef USE_AVX512Fa
+#ifdef USE_AVX512Fno
         sieve_line_ptr = &sieve_line_avx512_32k;
 #elif defined(USE_AVX2)
 
@@ -400,7 +400,7 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
         sdata->BUCKETSTARTI = 233416;
         break;
     case 524288:
-#ifdef USE_AVX512F
+#ifdef USE_AVX512Fno
 
         if (sdata->has_avx512f)
         {
