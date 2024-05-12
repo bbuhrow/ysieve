@@ -209,7 +209,10 @@ uint64_t primes_from_lineflags(soe_staticdata_t *sdata, thread_soedata_t *thread
 	range -= (range % 32);
 	lastid = 0;
 
-    printf("computing primes from %lu to %lu\n", sdata->orig_llimit, sdata->orig_hlimit);
+    if (sdata->VFLAG > 1)
+    {
+        printf("computing primes from %lu to %lu\n", sdata->orig_llimit, sdata->orig_hlimit);
+    }
 
     // divvy up the line bytes.  Unlike when counting primes,
     // here threading is by groups of bytes, over all classes.

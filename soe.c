@@ -1072,8 +1072,9 @@ void finalize_sieve(soe_staticdata_t *sdata,
         {
             printf("adding sieve primes as needed\n");
         }
-        printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
-        printf("bucket_start_id = %u\n", sdata->bucket_start_id);
+        
+        //printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
+        //printf("bucket_start_id = %u\n", sdata->bucket_start_id);
 
 		while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
 		{

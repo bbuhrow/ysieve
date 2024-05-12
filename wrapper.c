@@ -128,6 +128,11 @@ soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
     sdata->sieve_p = (uint32_t*)xmalloc(65536 * sizeof(uint32_t));
     sdata->num_sp = tiny_soe(66000, sdata->sieve_p);
 
+	sdata->witnesses = 0;
+	sdata->userclasses = 0;
+	sdata->analysis = 1;
+	sdata->gapmin = 0;
+
     sdata->VFLAG = vflag;
     sdata->THREADS = threads;
     if (blocksize > 1024)
@@ -240,6 +245,10 @@ uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highl
 	uint64_t *primes = NULL;
 
     sdata->only_count = count;
+	if (count)
+	{
+		sdata->analysis = 0;
+	}
 
     if (highlimit < lowlimit)
     {
