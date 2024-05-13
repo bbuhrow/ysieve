@@ -67,14 +67,9 @@ void sieve_sync(void *vptr)
     }
 
     sdata->num_found += t->linecount;
-    //if (sdata->only_count)
-    //{
-    //    sdata->num_found += t->linecount;
-    //}
 
     if (t->ddata.min_sieved_val < sdata->min_sieved_val)
     {
-       
         sdata->min_sieved_val = t->ddata.min_sieved_val;
     }
 
@@ -110,7 +105,7 @@ void sieve_work_fcn(void *vptr)
     soe_staticdata_t *sdata = udata->sdata;
     thread_soedata_t *t = &udata->ddata[tdata->tindex];
 
-    if ((sdata->only_count == 0) || (sdata->num_bitmap_primes > 0))
+    if ((sdata->only_count == 0) || (sdata->analysis > 1) || (sdata->num_bitmap_primes > 0))
     {
         // if we are computing primes (not just counting) or if
         // bitmap sieving is enabled then we need to keep all lines
@@ -953,8 +948,6 @@ void finalize_sieve(soe_staticdata_t *sdata,
 {
 	uint64_t i, j = 0, num_p = sdata->num_found;
 
-    
-
 	if (count)
 	{
 		//add in relevant sieving primes not captured in the flag arrays
@@ -1000,23 +993,40 @@ void finalize_sieve(soe_staticdata_t *sdata,
         // printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
         // printf("bucket_start_id = %u\n", sdata->bucket_start_id);
 
-		i = 0;
-        if (sdata->VFLAG > 2)
+        if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
         {
-            printf("adding sieve primes to count as needed\n");
-        }
-		while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
-		{
-            if (sdata->sieve_p[i] >= (sdata->orig_llimit + ui_offset))
+            // count twins from the stored sieve lines
+            num_p = count_twins(sdata);
+
+            while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
             {
-                //printf("%u ", sdata->sieve_p[i]);
-                num_p++;
+                // if we are doing twin prime or prime gap analysis 
+                // then do that analysis here for the sieving primes
+                // that are within the requested range.
+                if (sdata->sieve_p[i] >= (sdata->orig_llimit + ui_offset))
+                {
+                    if ((sdata->sieve_p[i + 1] - sdata->sieve_p[i]) == 2)
+                    {
+                        num_p++;
+                    }
+                }
+                i++;
             }
-			i++;
-		}
-        if (sdata->VFLAG > 2)
+        }
+        else
         {
-            printf("num_found total = %lu\n", num_p);
+            // num_p holds the primes counted in the main sieve.
+            // add in sieve primes that are within the requested interval.        
+            i = 0;
+            while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
+            {
+                if (sdata->sieve_p[i] >= (sdata->orig_llimit + ui_offset))
+                {
+                    //printf("%u ", sdata->sieve_p[i]);
+                    num_p++;
+                }
+                i++;
+            }
         }
 	}
 	else
@@ -1068,19 +1078,14 @@ void finalize_sieve(soe_staticdata_t *sdata,
 		// load in the sieve primes that we need
 		j = 0;
 		i = 0;
-        if (sdata->VFLAG > 2)
-        {
-            printf("adding sieve primes as needed\n");
-        }
-        
         //printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
         //printf("bucket_start_id = %u\n", sdata->bucket_start_id);
 
 		while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
 		{
             // if we are doing twin prime or prime gap analysis 
-            // then this needs updating... when the range includes 
-            // sieve primes.
+            // then do that analysis here for the sieving primes
+            // that are within the requested range.
             if (sdata->sieve_p[i] >= (sdata->orig_llimit + ui_offset))
             {
                 if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
@@ -1097,10 +1102,6 @@ void finalize_sieve(soe_staticdata_t *sdata,
             }
             i++;
 		}
-        if (sdata->VFLAG > 2)
-        {
-            printf("num_found total = %lu\n", num_p);
-        }
 
 		//and then the primes in the lines
 		num_p = primes_from_lineflags(sdata, thread_data, j, primes);

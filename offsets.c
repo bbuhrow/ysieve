@@ -265,7 +265,8 @@ void get_offsets(thread_soedata_t *thread_data)
                 vr = vec_redc(even, odd, vpinv, vp);
 
                 // take out of monty rep
-                vr = vec_redc(CLEAR_HIGH_VEC(vr), CLEAR_HIGH_VEC(_mm256_shuffle_epi32(vr, 0xB1)), vpinv, vp);
+                vr = vec_redc(CLEAR_HIGH_VEC(vr), 
+                    CLEAR_HIGH_VEC(_mm256_shuffle_epi32(vr, 0xB1)), vpinv, vp);
 
                 //t1 = _mm256_set1_epi32(linesize);
                 //t1 = _mm256_or_si256(_mm256_cmpgt_epi32(t1, vr), _mm256_cmpeq_epi32(t1, vr));

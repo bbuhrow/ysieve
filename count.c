@@ -28,6 +28,11 @@ SOFTWARE.
 #include <stdint.h>
 #include <immintrin.h>
 
+uint64_t count_8_bytes(soe_staticdata_t* sdata,
+    uint64_t pcount, uint64_t byte_offset);
+uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
+    uint64_t pcount, uint64_t byte_offset);
+
 uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
 {
 	//extract stuff from the thread data structure
@@ -138,6 +143,118 @@ uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
 	return it;
 }
 
+uint64_t count_twins(soe_staticdata_t* sdata)
+{
+    int i;
+    uint64_t lowlimit = sdata->lowlimit;
+    uint64_t count = 0;
+    uint64_t prodN = sdata->prodN;
+    uint64_t numchunks = (sdata->orig_hlimit - lowlimit) / (64 * prodN) + 1;
+
+	// counting twins and other prime constellations requires
+	// all of the sieve lines in memory for reording.
+#if defined(USE_BMI2) || defined(USE_AVX512F)
+    if ((sdata->has_bmi2) && (sdata->numclasses <= 48))
+    {
+        for (i = 0; i < numchunks; i++)
+        {
+            count = count_8_bytes_bmi2(sdata, count, (uint64_t)i * 8);
+
+            // if searching for prime constellations, then we need to look at the last 
+            // flags of this block of 8 bytes and the first flags of the next one.
+            // we do this by loading the trailing bits of this block into a carry
+            // register.  The rest is handled by the block analysis function.
+            // For the first block in a multi-threaded run, we should also
+            // be receiving carry data from the previous thread in order to
+            // maintain continuity across threads.
+
+            if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
+            {
+                uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
+                uint8_t* firstline = sdata->lines[0];
+
+                if ((i + 1) < numchunks)
+                {
+                    uint8_t lastflag = lastline[i * 8 + 7] & 0x80;
+                    uint8_t firstflag = firstline[i * 8 + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        count++;
+                    }
+                }
+                else if ((i + 1) < sdata->numlinebytes)
+                {
+                    // this thread is done but if there is more data after
+                    // this thread's chunk then check between thread boundaries.
+                    uint8_t lastflag = lastline[i * 8 + 7] & 0x80;
+                    uint8_t firstflag = firstline[i * 8 + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        count++;
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        // if we don't have BMI2, or numclasses > 48, or we're doing a more
+        // complicated analysis, then we should end up here.
+        
+        for (i = 0; i < numchunks; i++)
+        {
+            count = count_8_bytes(sdata, count, (uint64_t)i * 8);
+
+            // if searching for prime constellations, then we need to look at the last 
+            // flags of this block of 8 bytes and the first flags of the next one.
+            // we do this by loading the trailing bits of this block into a carry
+            // register.  The rest is handled by the block analysis function.
+            // For the first block in a multi-threaded run, we should also
+            // be receiving carry data from the previous thread in order to
+            // maintain continuity across threads.
+
+            if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
+            {
+                uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
+                uint8_t* firstline = sdata->lines[0];
+
+                if ((i + 1) < numchunks)
+                {
+                    uint8_t lastflag = lastline[i * 8 + 7] & 0x80;
+                    uint8_t firstflag = firstline[i * 8 + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        count++;
+                    }
+                }
+                else if ((i + 1) < sdata->numlinebytes)
+                {
+                    // this thread is done but if there is more data after
+                    // this thread's chunk then check between thread boundaries.
+                    uint8_t lastflag = lastline[i * 8 + 7] & 0x80;
+                    uint8_t firstflag = firstline[i * 8 + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        count++;
+                    }
+                }
+            }
+        }
+    }
+#else
+    for (i = t->startid; i < t->stopid; i += 8)
+    {
+        t->linecount = compute_8_bytes(sdata, t->linecount, t->ddata.primes, i);
+    }
+#endif
+
+	return count;
+}
+
 void count_line_special(thread_soedata_t *thread_data)
 {
 	//extract stuff from the thread data structure
@@ -243,3 +360,338 @@ void count_line_special(thread_soedata_t *thread_data)
 	}
 
 }
+
+uint64_t count_8_bytes(soe_staticdata_t* sdata,
+    uint64_t pcount, uint64_t byte_offset)
+{
+    uint32_t current_line;
+    // re-ordering queues supporting arbitrary residue classes.
+    uint64_t** pqueues; // [64][48]
+    uint32_t pcounts[64];
+    int i, j;
+    uint32_t nc = sdata->numclasses;
+    uint64_t lowlimit = sdata->lowlimit;
+    uint64_t prodN = sdata->prodN;
+    uint8_t** lines = sdata->lines;
+    uint64_t olow = sdata->orig_llimit;
+    uint64_t ohigh = sdata->orig_hlimit;
+    int GLOBAL_OFFSET = sdata->GLOBAL_OFFSET;
+
+    if ((byte_offset & 32767) == 0)
+    {
+        if (sdata->VFLAG > 1)
+        {
+            printf("computing: %d%%\r", (int)
+                ((double)byte_offset / (double)(sdata->numlinebytes) * 100.0));
+            fflush(stdout);
+        }
+    }
+
+    pqueues = (uint64_t**)xmalloc(64 * sizeof(uint64_t*));
+    for (i = 0; i < 64; i++)
+    {
+        pqueues[i] = (uint64_t*)xmalloc(sdata->numclasses * sizeof(uint64_t));
+    }
+
+    // Compute the primes using ctz on the 64-bit words but push the results
+    // into 64 different queues depending on the bit position.  Then
+    // we pull from the queues in order while storing into the primes array.
+    // This time the bottleneck is mostly in the queue-based sorting
+    // and associated memory operations, so we don't bother with
+    // switching between branch-free inner loops or not.
+    memset(pcounts, 0, 64 * sizeof(uint32_t));
+
+    lowlimit += byte_offset * 8 * prodN;
+    for (current_line = 0; current_line < nc; current_line++)
+    {
+        uint64_t* line64 = (uint64_t*)lines[current_line];
+        uint64_t flags64 = line64[byte_offset / 8];
+
+        while (flags64 > 0)
+        {
+            uint64_t pos = _trail_zcnt64(flags64);
+            uint64_t prime = lowlimit + pos * prodN + sdata->rclass[current_line];
+
+            if ((prime >= olow) && (prime <= ohigh))
+            {
+                pqueues[pos][pcounts[pos]] = prime;
+                pcounts[pos]++;
+            }
+            flags64 ^= (1ULL << pos);
+        }
+    }
+
+    for (i = 0; i < 64; i++)
+    {
+
+        // search for twins and only load the leading element/prime.
+        // if depth-based sieving then these are candidate twins.
+        if (pcounts[i] > 0)
+        {
+
+            for (j = 0; j < pcounts[i] - 1; j++)
+            {
+                if ((pqueues[i][j + 1] - pqueues[i][j]) == 2)
+                {
+                    pcount++;
+                }
+            }
+            if (i < 63)
+            {
+                if (pcounts[i + 1] > 0)
+                {
+                    if ((pqueues[i + 1][0] - pqueues[i][j]) == 2)
+                    {
+                        pcount++;
+                    }
+                }
+            }
+        }
+
+    }
+
+    for (i = 0; i < 64; i++)
+    {
+        free(pqueues[i]);
+    }
+    free(pqueues);
+
+    return pcount;
+}
+
+
+
+#if defined(USE_BMI2) || defined(USE_AVX512F)
+
+__inline uint64_t interleave_pdep2x32(uint32_t x1, uint32_t x2)
+{
+    return _pdep_u64(x1, 0x5555555555555555)
+        | _pdep_u64(x2, 0xaaaaaaaaaaaaaaaa);
+}
+
+__inline uint64_t interleave_pdep_8x8(uint8_t x1,
+    uint8_t x2,
+    uint8_t x3,
+    uint8_t x4,
+    uint8_t x5,
+    uint8_t x6,
+    uint8_t x7,
+    uint8_t x8)
+{
+    return _pdep_u64(x1, 0x0101010101010101ull) |
+        _pdep_u64(x2, 0x0202020202020202ull) |
+        _pdep_u64(x3, 0x0404040404040404ull) |
+        _pdep_u64(x4, 0x0808080808080808ull) |
+        _pdep_u64(x5, 0x1010101010101010ull) |
+        _pdep_u64(x6, 0x2020202020202020ull) |
+        _pdep_u64(x7, 0x4040404040404040ull) |
+        _pdep_u64(x8, 0x8080808080808080ull);
+}
+
+#define BIT0 0x1
+#define BIT1 0x2
+#define BIT2 0x4
+#define BIT3 0x8
+#define BIT4 0x10
+#define BIT5 0x20
+#define BIT6 0x40
+#define BIT7 0x80
+
+uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
+    uint64_t pcount, uint64_t byte_offset)
+{
+    uint32_t nc = sdata->numclasses;
+    uint64_t lowlimit = sdata->lowlimit;
+    uint8_t** lines = sdata->lines;
+
+    if ((byte_offset & 32767) == 0)
+    {
+        if (sdata->VFLAG > 1)
+        {
+            printf("computing: %d%%\r", (int)
+                ((double)byte_offset / (double)(sdata->numlinebytes) * 100.0));
+            fflush(stdout);
+        }
+    }
+
+    // AVX2 version, new instructions help quite a bit:
+    // use _pdep_u64 to align/interleave bits from multiple bytes, 
+    // _blsr_u64 to clear the last set bit, and depending on the 
+    // number of residue classes, AVX2 vector load/store operations.
+
+    // here is the 2 line version
+    if (nc == 2)
+    {
+        int i;
+        uint32_t last_bit = 0;
+        uint32_t* lines32a = (uint32_t*)lines[0];
+        uint32_t* lines32b = (uint32_t*)lines[1];
+        
+        // align the current bytes in next 2 residue classes
+        for (i = 0; i < 2; i++)
+        {
+            uint64_t aligned_flags;
+
+            aligned_flags = interleave_pdep2x32(
+                lines32a[byte_offset / 4 + i],
+                lines32b[byte_offset / 4 + i]);
+
+
+            // alternate bits encode potential primes
+            // in residue classes 1 and 5.  So twins can 
+            // only exist with flags in class 5 followed by 1.
+            uint64_t twins = aligned_flags & (aligned_flags >> 1);
+
+            twins &= 0xaaaaaaaaaaaaaaaaULL;
+
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags);
+
+            last_bit = (aligned_flags >> 63);
+        }
+    }
+    else if (nc == 8)
+    {
+        int i;
+        uint32_t last_bit = 0;
+
+        // align the current bytes in next 8 residue classes
+        for (i = 0; i < 8; i++)
+        {
+            uint64_t aligned_flags;
+
+            aligned_flags = interleave_pdep_8x8(lines[0][byte_offset + i],
+                lines[1][byte_offset + i],
+                lines[2][byte_offset + i],
+                lines[3][byte_offset + i],
+                lines[4][byte_offset + i],
+                lines[5][byte_offset + i],
+                lines[6][byte_offset + i],
+                lines[7][byte_offset + i]);
+
+            uint64_t twins = aligned_flags & (aligned_flags >> 1);
+
+            twins &= 0x9494949494949494ULL;
+
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags);
+            
+            last_bit = (aligned_flags >> 63);
+        }
+    }
+    else if (nc == 48)
+    {
+        int i;
+        uint32_t last_bit = 0;
+
+        // align the current bytes in next 8 residue classes
+        for (i = 0; i < 8; i++)
+        {
+            uint64_t aligned_flags;
+
+            aligned_flags = interleave_pdep_8x8(lines[0][byte_offset + i],
+                lines[1][byte_offset + i],
+                lines[2][byte_offset + i],
+                lines[3][byte_offset + i],
+                lines[4][byte_offset + i],
+                lines[5][byte_offset + i],
+                lines[6][byte_offset + i],
+                lines[7][byte_offset + i]);
+
+            uint64_t twins = aligned_flags & (aligned_flags >> 1);
+
+            twins &= 0x9494949494949494ULL;
+
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags);
+
+            last_bit = (aligned_flags >> 63);
+        }
+    }
+    else
+    {
+        uint64_t** pqueues; // [64][48]
+        uint32_t pcounts[64];
+        int i, j;
+        uint64_t prodN = sdata->prodN;
+        uint32_t current_line;
+
+        // ordering the bits becomes inefficient with 48 lines because
+        // they would need to be dispersed over too great a distance.
+        // instead we compute the primes as before but push the results
+        // into 64 different queues depending on the bit position.  Then
+        // we pull from the queues in order while storing into the primes array.
+        // This time the bottleneck is mostly in the queue-based sorting
+        // and associated memory operations, so we don't bother with
+        // switching between branch-free inner loops or not.
+        pqueues = (uint64_t**)xmalloc(64 * sizeof(uint64_t*));
+        for (i = 0; i < 64; i++)
+        {
+            pqueues[i] = (uint64_t*)xmalloc(sdata->numclasses * sizeof(uint64_t));
+        }
+
+        // Compute the primes using ctz on the 64-bit words but push the results
+        // into 64 different queues depending on the bit position.  Then
+        // we pull from the queues in order while storing into the primes array.
+        // This time the bottleneck is mostly in the queue-based sorting
+        // and associated memory operations, so we don't bother with
+        // switching between branch-free inner loops or not.
+        memset(pcounts, 0, 64 * sizeof(uint32_t));
+
+        lowlimit += byte_offset * 8 * prodN;
+        for (current_line = 0; current_line < nc; current_line++)
+        {
+            uint64_t* line64 = (uint64_t*)lines[current_line];
+            uint64_t flags64 = line64[byte_offset / 8];
+
+            while (flags64 > 0)
+            {
+                uint64_t pos = _trail_zcnt64(flags64);
+                uint64_t prime = lowlimit + pos * prodN + sdata->rclass[current_line];
+
+                pqueues[pos][pcounts[pos]] = prime;
+                pcounts[pos]++;
+                flags64 ^= (1ULL << pos);
+            }
+        }
+
+        for (i = 0; i < 64; i++)
+        {
+            // search for twins and only load the leading element/prime.
+            // if depth-based sieving then these are candidate twins.
+            if (pcounts[i] > 0)
+            {
+                for (j = 0; j < pcounts[i] - 1; j++)
+                {
+                    if ((pqueues[i][j + 1] - pqueues[i][j]) == 2)
+                    {
+                        pcount++;
+                    }
+                }
+                if (i < 63)
+                {
+                    if (pcounts[i + 1] > 0)
+                    {
+                        if ((pqueues[i + 1][0] - pqueues[i][j]) == 2)
+                        {
+                            pcount++;
+                        }
+                    }
+                }
+            }
+
+        }
+
+        for (i = 0; i < 64; i++)
+        {
+            free(pqueues[i]);
+        }
+        free(pqueues);
+
+
+    }
+
+    return pcount;
+}
+
+#endif

@@ -240,6 +240,7 @@ void sieve_line_avx512_512k(thread_soedata_t* thread_data);
 
 
 uint64_t count_line(soe_staticdata_t* sdata, uint32_t current_line);
+uint64_t count_twins(soe_staticdata_t* sdata);
 void count_line_special(thread_soedata_t* thread_data);
 uint32_t compute_32_bytes(soe_staticdata_t* sdata,
     uint32_t pcount, uint64_t* primes, uint64_t byte_offset);

@@ -79,8 +79,7 @@ int main(int argc, char** argv)
         haveFile = 0;
     }
 
-    if (options->outScreen || haveFile || (options->num_witnesses > 0) ||
-        (options->analysis_type > 0))
+    if (options->outScreen || haveFile || (options->num_witnesses > 0)) // || (options->analysis_type > 0))
     {
         count = 0;
     }

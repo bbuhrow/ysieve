@@ -348,6 +348,10 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
     sdata->FLAGSIZE = 8 * sdata->SOEBLOCKSIZE;
     sdata->FLAGSIZEm1 = sdata->FLAGSIZE - 1;
 
+    // the avx2 sieve_line functions give incorrect results
+    // sometimes when varying numclasses/blocksize.  disabled
+    // their use until that can be sorted out.
+
     switch (sdata->SOEBLOCKSIZE)
     {
     case 32768:
@@ -361,7 +365,7 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
 
         if (sdata->has_avx2)
         {
-            sieve_line_ptr = &sieve_line_avx2_32k;
+            //sieve_line_ptr = &sieve_line_avx2_32k;
         }
 #endif
         break;
@@ -372,7 +376,7 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
     case 131072:
         sdata->FLAGBITS = 20;
         sdata->BUCKETSTARTI = 123040;
-#ifdef USE_AVX512F
+#ifdef USE_AVX512Fno
 
         if (sdata->has_avx512f)
         {
@@ -381,12 +385,12 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
 #elif defined(USE_AVX2)
         if (sdata->has_avx2)
         {
-            sieve_line_ptr = &sieve_line_avx2_128k;
+            //sieve_line_ptr = &sieve_line_avx2_128k;
         }
 #endif
         break;
     case 262144:
-#ifdef USE_AVX512F
+#ifdef USE_AVX512Fno
 
         if (sdata->has_avx512f)
         {
@@ -972,20 +976,12 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
     sdata->lines = (uint8_t **)xmalloc_align(sdata->numclasses * sizeof(uint8_t *));
     numbytes = 0;
     
-    if ((sdata->only_count == 0) || (sdata->num_bitmap_primes > 0))
+    if ((sdata->only_count == 0) || (sdata->analysis > 1) || (sdata->num_bitmap_primes > 0))
     {
-        //actually allocate all of the lines as a continuous linear array of bytes
-        //sdata->lines[0] = (uint8_t *)xmalloc_align(numlinebytes * sdata->numclasses * sizeof(uint8_t));
-        //if (sdata->lines[0] == NULL)
-        //{
-        //    printf("error allocated sieve lines\n");
-        //    exit(-1);
-        //}
         numbytes += sdata->numclasses * numlinebytes * sizeof(uint8_t);
 
         for (i = 0; i < sdata->numclasses; i++)
         {
-            //sdata->lines[i] = sdata->lines[0] + i * numlinebytes;
             sdata->lines[i] = (uint8_t*)xmalloc_align(numlinebytes * sizeof(uint8_t));
         }
     }

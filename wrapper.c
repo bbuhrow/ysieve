@@ -128,6 +128,7 @@ soe_staticdata_t* soe_init(int vflag, int threads, int blocksize)
     sdata->sieve_p = (uint32_t*)xmalloc(65536 * sizeof(uint32_t));
     sdata->num_sp = tiny_soe(66000, sdata->sieve_p);
 
+	// default settings: compute primes with default number of classes
 	sdata->witnesses = 0;
 	sdata->userclasses = 0;
 	sdata->analysis = 1;
@@ -245,10 +246,10 @@ uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highl
 	uint64_t *primes = NULL;
 
     sdata->only_count = count;
-	if (count)
-	{
-		sdata->analysis = 0;
-	}
+	//if (count)
+	//{
+	//	sdata->analysis = 0;
+	//}
 
     if (highlimit < lowlimit)
     {
@@ -315,69 +316,13 @@ uint64_t *soe_wrapper(soe_staticdata_t* sdata, uint64_t lowlimit, uint64_t highl
 
 	if (count)
 	{
-		//this needs to be a range of at least 1e6
-		if ((highlimit - lowlimit) < 1000000)
-		{
-			//go and get a new range.
-			tmpl = lowlimit;
-			tmph = tmpl + 1000000;
-
-			//since this is a small range, we need to 
-			//find a bigger range and count them.
-			sdata->is_main_sieve = 1;
-			primes = GetPRIMESRange(sdata, NULL, tmpl, tmph, &retval);
-
-			*num_p = 0;
-			//count how many are in the original range of interest
-			for (i = 0; i < retval; i++)
-			{
-                if ((primes[i] >= lowlimit) && (primes[i] <= highlimit))
-                {
-                    (*num_p)++;
-                }
-			}
-			free(primes);
-			primes = NULL;
-		}
-		else
-		{	
-			sdata->is_main_sieve = 1;
-			*num_p = spSOE(sdata, NULL, lowlimit, &highlimit, count, NULL);
-		}
-
+		sdata->is_main_sieve = 1;
+		*num_p = spSOE(sdata, NULL, lowlimit, &highlimit, count, NULL);
 	}
 	else
 	{
-		tmpl = lowlimit;
-		tmph = highlimit;
-
-		//this needs to be a range of at least 1e6
-		if ((tmph - tmpl) < 1000000)
-		{
-			//there is slack built into the sieve limit, so go ahead and increase
-			//the size of the interval to make it at least 1e6.
-			tmph = tmpl + 1000000;
-
-			//since this is a small range, we need to 
-			//find a bigger range and count them.
-			sdata->is_main_sieve = 1;
-			primes = GetPRIMESRange(sdata, NULL, tmpl, tmph, &retval);
-			*num_p = 0;
-			for (i = 0; i < retval; i++)
-			{
-				if (primes[i] >= lowlimit && primes[i] <= highlimit)
-					(*num_p)++;
-			}
-
-		}
-		else
-		{
-			//we don't need to mess with the requested range,
-			//so GetPRIMESRange will return the requested range directly
-			//and the count will be in NUM_P
-			sdata->is_main_sieve = 1;
-			primes = GetPRIMESRange(sdata, NULL, lowlimit, highlimit, num_p);
-		}
+		sdata->is_main_sieve = 1;
+		primes = GetPRIMESRange(sdata, NULL, lowlimit, highlimit, num_p);
 
 		// now dump the requested range of primes to a file, or the
 		// screen, both, or neither, depending on the state of a couple
@@ -541,70 +486,13 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 
 	if (count)
 	{
-		//this needs to be a range of at least 1e6
-		if (range < 1000000)
-		{
-			//go and get a new range.
-			tmpl = 0;
-			tmph = 1000000;
-
-			//since this is a small range, we need to 
-			//find a bigger range and count them.
-			sdata->is_main_sieve = 1;
-			values = GetPRIMESRange(sdata, offset, tmpl, tmph, &retval);
-
-			*num_p = 0;
-			//count how many are in the original range of interest
-			for (i = 0; i < retval; i++)
-			{
-				mpz_add_ui(tmpz, *offset, values[i]);
-                if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
-                {
-                    (*num_p)++;
-                }
-			}
-			free(values);
-			values = NULL;
-		}
-		else
-		{
-			sdata->is_main_sieve = 1;
-			*num_p = spSOE(sdata, offset, 0, &range, 1, NULL);
-		}
-
+		sdata->is_main_sieve = 1;
+		*num_p = spSOE(sdata, offset, 0, &range, 1, NULL);
 	}
 	else
 	{
-		// this needs to be a range of at least 1e6
-		if (range < 1000000)
-		{
-			//there is slack built into the sieve limit, so go ahead and increase
-			//the size of the interval to make it at least 1e6.
-			tmpl = 0;
-			tmph = tmpl + 1000000;
-
-			// since this is a small range, we need to 
-			// find a bigger range and count them.
-			sdata->is_main_sieve = 1;
-			values = GetPRIMESRange(sdata, offset, tmpl, tmph, &retval);
-			*num_p = 0;
-			for (i = 0; i < retval; i++)
-			{
-				mpz_add_ui(tmpz, *offset, values[i]);
-                if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
-                {
-                    (*num_p)++;
-                }
-			}
-		}
-		else
-		{
-			//we don't need to mess with the requested range,
-			//so GetPRIMESRange will return the requested range directly
-			//and the count will be in NUM_P
-			sdata->is_main_sieve = 1;
-			values = GetPRIMESRange(sdata, offset, 0, range, num_p);
-		}
+		sdata->is_main_sieve = 1;
+		values = GetPRIMESRange(sdata, offset, 0, range, num_p);
 
 		if (num_witnesses > 0)
 		{
