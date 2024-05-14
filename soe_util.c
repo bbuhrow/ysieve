@@ -436,9 +436,9 @@ void get_numclasses(uint64_t highlimit, uint64_t lowlimit, soe_staticdata_t *sda
     {
         int i, k;
         k = 0;
-        prodN = 210;
+        prodN = 2310;
         //printf("static uint32_t class_inv30030[5760] = {");
-        printf("residue classes mod 210:\n");
+        printf("residue classes mod 2310:\n");
         for (i = 1; i < prodN; i++)
         {
             if (gcd_1(i, (uint64_t)prodN) == 1)

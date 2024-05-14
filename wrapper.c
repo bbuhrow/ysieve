@@ -34,6 +34,21 @@ SOFTWARE.
 #include <math.h>
 #include "threadpool.h"
 
+
+
+// known issues:
+// sieve_to_depth crashes with offsets too big (somewhere above 2^80)
+// sieve_to_depth with analysis=2, numclasses=480 and computing PRPs is *way* too slow,
+//      something is wrong.  compared to numclasses=48, which seems normal.  same
+//		number of candidates in both cases... weird.  Could be a threading thing; 
+//		computing PRPs with one thread seems about the same speed for each numclasses.
+//		"2^70" "2^70+10^11" -v -v -v -t 8 -p 1000000000 -w 1 -c 480 -b 131072 -a 2
+//		"2^70" "2^70+10^11" -v -v -v -t 8 -p 1000000000 -w 1 -c 48 -b 131072 -a 2
+
+
+
+
+
 void compute_prps_dispatch(void *vptr)
 {
     tpool_t *tdata = (tpool_t *)vptr;
@@ -65,26 +80,29 @@ void compute_prps_work_fcn(void *vptr)
     t->linecount = 0;
     for (i = t->startid; i < t->stopid; i++)
     {
-        //if (((i & 127000) == 0) && (sdata->VFLAG > 0))
-        //{
-        //    printf("thread %d progress: %d%%\r", tdata->tindex, 
-        //        (int)((double)(i - t->startid) / (double)(t->stopid - t->startid) * 100.0));
-        //    fflush(stdout);
-        //}
+        if (((i & 8191) == 0) && (sdata->VFLAG > 0))
+        {
+            printf("thread %d progress: %d%%\r", tdata->tindex, 
+                (int)((double)(i - t->startid) / (double)(t->stopid - t->startid) * 100.0));
+            fflush(stdout);
+        }
 
         mpz_add_ui(t->tmpz, t->offset, t->ddata.primes[i - t->startid]);
         if ((mpz_cmp(t->tmpz, t->lowlimit) >= 0) && (mpz_cmp(t->highlimit, t->tmpz) >= 0))
         {
-			//gmp_printf("candidate %Zd is...", t->tmpz);
+			//gmp_printf("candidate %Zd... ", t->tmpz);
             //if (mpz_extrastrongbpsw_prp(t->tmpz))
             if (mpz_probab_prime_p(t->tmpz, witnesses))
             {
 				if (sdata->analysis == 2)
 				{
+					// also need to check the twin
+					//gmp_printf("and twin %Zd is...", t->tmpz);
 					mpz_add_ui(t->tmpz, t->tmpz, 2);
 					if (mpz_probab_prime_p(t->tmpz, sdata->witnesses))
 					{
 						t->ddata.primes[t->linecount++] = t->ddata.primes[i - t->startid];
+						//printf("prime!\n");
 					}
 				}
 				else
@@ -550,24 +568,25 @@ uint64_t *sieve_to_depth(soe_staticdata_t* sdata,
 				retval = 0;
 				for (i = 0; i < range; i++)
 				{
-					//if (((i & 127000) == 0) && (sdata->VFLAG > 0))
-					//{
-					//    printf("thread %d progress: %d%%\r", tdata->tindex, 
-					//        (int)((double)(i - t->startid) / (double)(t->stopid - t->startid) * 100.0));
-					//    fflush(stdout);
-					//}
+					if (((i & 8191) == 0) && (sdata->VFLAG > 0))
+					{
+					    printf("progress: %d%%\r", 
+					        (int)((double)(i) / (double)(range) * 100.0));
+					    fflush(stdout);
+					}
 
 					mpz_add_ui(tmpz, *offset, values[i]);
 					if ((mpz_cmp(tmpz, lowlimit) >= 0) && (mpz_cmp(highlimit, tmpz) >= 0))
 					{
 						//gmp_printf("candidate %Zd is...", tmpz);
 						//if (mpz_extrastrongbpsw_prp(t->tmpz))
-						if (mpz_probab_prime_p(tmpz, sdata->witnesses))
+						if (mpz_probab_prime_p(tmpz, num_witnesses))
 						{
 							if (sdata->analysis == 2)
 							{
+								// also need to check the twin
 								mpz_add_ui(tmpz, tmpz, 2);
-								if (mpz_probab_prime_p(tmpz, sdata->witnesses))
+								if (mpz_probab_prime_p(tmpz, num_witnesses))
 								{
 									values[retval++] = values[i];
 								}

@@ -103,24 +103,6 @@ void compute_primes_work_fcn(void *vptr)
             // For the first block in a multi-threaded run, we should also
             // be receiving carry data from the previous thread in order to
             // maintain continuity across threads.
-            
-            //t->ddata.analysis_carry_data[0] = 0;
-            if (0) //(sdata->analysis > 1) && (sdata->is_main_sieve == 1))
-            {
-                uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
-                uint8_t lastflag = lastline[i + 7] & 0x80;
-
-                if (lastflag)
-                {
-                    uint64_t lowlimit = sdata->lowlimit + i * 8 * sdata->prodN;
-                    uint64_t prime = lowlimit + 63 * sdata->prodN + sdata->rclass[sdata->numclasses - 1];
-
-                    if ((prime >= sdata->orig_llimit) && (prime <= sdata->orig_hlimit))
-                    {
-                        t->ddata.analysis_carry_data[0] = 1; // twin only
-                    }
-                }
-            }
 
             if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
             {
@@ -462,17 +444,6 @@ uint32_t compute_8_bytes(soe_staticdata_t *sdata,
             // if depth-based sieving then these are candidate twins.
             if (pcounts[i] > 0)
             {
-                //if ((i == 0) && (sdata->analysis_carry_data[0] > 0))
-                //{
-                //    uint64_t llimit = sdata->lowlimit + (byte_offset - 8) * 8 * sdata->prodN;
-                //    uint64_t prevprime = llimit + 63 * sdata->prodN + 
-                //        sdata->rclass[sdata->numclasses - 1];
-                //
-                //    if ((pqueues[i][0] - prevprime) == 2)
-                //    {
-                //        primes[GLOBAL_OFFSET + pcount++] = prevprime;
-                //    }
-                //}
                 for (j = 0; j < pcounts[i] - 1; j++)
                 {
                     if ((pqueues[i][j + 1] - pqueues[i][j]) == 2)

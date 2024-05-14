@@ -79,20 +79,23 @@ int main(int argc, char** argv)
         haveFile = 0;
     }
 
-    if (options->outScreen || haveFile || (options->num_witnesses > 0)) // || (options->analysis_type > 0))
-    {
-        count = 0;
-    }
-    else
-    {
-        count = 1;
-    }
-
     sdata = soe_init(options->verbosity, options->threads, options->blocksize);
     sdata->witnesses = options->num_witnesses;
     sdata->userclasses = options->numclasses;
     sdata->analysis = options->analysis_type;
     sdata->gapmin = options->gapmin;
+
+    if (options->outScreen || haveFile || (options->num_witnesses > 0))
+    {
+        count = 0;
+        // these options require calculating primes
+        if (sdata->analysis < 1)
+            sdata->analysis = 1;
+    }
+    else
+    {
+        count = 1;
+    }
 
     gettimeofday(&tstart, NULL);
     
@@ -113,10 +116,33 @@ int main(int argc, char** argv)
         mpz_sub_ui(high, high, num_found);
 
         gmp_printf("Removed %Zd composites\n", high);
-        printf("Potential remaining primes: %" PRIu64 "\n", num_found);
+        if (sdata->analysis == 2)
+        {
+            if (sdata->witnesses > 0)
+            {
+                printf("Probable twins  : %" PRIu64 "\n", num_found);
+            }
+            else
+            {
+                printf("Candidate twins : %" PRIu64 "\n", num_found);
+            }
+            
+        }
+        else
+        {
+            if (sdata->witnesses > 0)
+            {
+                printf("Probable primes : %" PRIu64 "\n", num_found);
+            }
+            else
+            {
+                printf("Candidate primes: %" PRIu64 "\n", num_found);
+            }
+            
+        }
         gettimeofday(&tstop, NULL);
         t = ytools_difftime(&tstart, &tstop);
-        printf("Elapsed time              : %1.6f seconds\n", t);
+        printf("Elapsed time    : %1.6f seconds\n", t);
 
         mpz_clear(low);
         mpz_clear(high);
@@ -131,7 +157,14 @@ int main(int argc, char** argv)
         primes = soe_wrapper(sdata, start, stop, count, &num_found,
             haveFile, options->outScreen);
 
-        printf("Num primes found: %" PRIu64 "\n", num_found);
+        if (sdata->analysis == 2)
+        {
+            printf("Num twins found : %" PRIu64 "\n", num_found);
+        }
+        else
+        {
+            printf("Num primes found: %" PRIu64 "\n", num_found);
+        }
         gettimeofday(&tstop, NULL);
         t = ytools_difftime(&tstart, &tstop);
         printf("Elapsed time    : %1.6f seconds\n", t);

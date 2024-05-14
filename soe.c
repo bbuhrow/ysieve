@@ -118,6 +118,7 @@ void sieve_work_fcn(void *vptr)
             // skipped entirely as they are never involved in a twin.
             if ((sdata->numclasses == 8) && ((t->current_line == 1) || (t->current_line == 6)))
             {
+                t->linecount = 0;
                 t->ddata.min_sieved_val = (1 << 31) - 1;
                 return;
             }
@@ -145,6 +146,7 @@ void sieve_work_fcn(void *vptr)
                 case 36:
                 case 39:
                 case 42:
+                    t->linecount = 0;
                     t->ddata.min_sieved_val = (1 << 31) - 1;
                     return;
                 }
