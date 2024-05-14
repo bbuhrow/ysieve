@@ -27,11 +27,186 @@ SOFTWARE.
 #include "ytools.h"
 #include <stdint.h>
 #include <immintrin.h>
+#include "threadpool.h"
 
 uint64_t count_8_bytes(soe_staticdata_t* sdata,
     uint64_t pcount, uint64_t byte_offset);
 uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
     uint64_t pcount, uint64_t byte_offset);
+
+void count_twins_dispatch(void* vptr)
+{
+    tpool_t* tdata = (tpool_t*)vptr;
+    soe_userdata_t* t = (soe_userdata_t*)tdata->user_data;
+    soe_staticdata_t* sdata = t->sdata;
+
+    // launch one range of computation for each thread.  don't really
+    // need a threadpool for this, but the infrastructure is there...
+    if (sdata->sync_count < sdata->THREADS)
+    {
+        tdata->work_fcn_id = 0;
+        sdata->sync_count++;
+    }
+    else
+    {
+        tdata->work_fcn_id = tdata->num_work_fcn;
+    }
+
+    return;
+}
+
+void count_twins_work_fcn(void* vptr)
+{
+    tpool_t* tdata = (tpool_t*)vptr;
+    soe_userdata_t* udata = (soe_userdata_t*)tdata->user_data;
+    soe_staticdata_t* sdata = udata->sdata;
+    thread_soedata_t* t = &udata->ddata[tdata->tindex];
+    int i;
+
+    uint64_t count = 0;
+    uint64_t numchunks = (t->stopid - t->startid);
+
+
+    // counting twins and other prime constellations requires
+        // all of the sieve lines in memory for reording.
+#if defined(USE_BMI2) || defined(USE_AVX512F)
+    if ((sdata->has_bmi2) && (sdata->numclasses <= 48))
+    {
+        for (i = 0; i < numchunks; i++)
+        {
+            count = count_8_bytes_bmi2(sdata, count, (uint64_t)(t->startid + i) * 8);
+
+            // if searching for prime constellations, then we need to look at the last 
+            // flags of this block of 8 bytes and the first flags of the next one.
+            // we do this by loading the trailing bits of this block into a carry
+            // register.  The rest is handled by the block analysis function.
+            // For the first block in a multi-threaded run, we should also
+            // be receiving carry data from the previous thread in order to
+            // maintain continuity across threads.
+
+            if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
+            {
+                uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
+                uint8_t* firstline = sdata->lines[0];
+
+                if ((i + 1) < numchunks)
+                {
+                    uint8_t lastflag = lastline[(uint64_t)(t->startid + i) * 8 + 7] & 0x80;
+                    uint8_t firstflag = firstline[(uint64_t)(t->startid + i) * 8 + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        count++;
+                    }
+                }
+                else if ((i + 1) < sdata->numlinebytes)
+                {
+                    // this thread is done but if there is more data after
+                    // this thread's chunk then check between thread boundaries.
+                    uint8_t lastflag = lastline[(uint64_t)(t->startid + i) * 8 + 7] & 0x80;
+                    uint8_t firstflag = firstline[(uint64_t)(t->startid + i) * 8 + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        count++;
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        // if we don't have BMI2, or numclasses > 48, then we should end up here.
+        for (i = 0; i < numchunks; i++)
+        {
+            count = count_8_bytes(sdata, count, (uint64_t)(t->startid + i) * 8);
+
+            // if searching for prime constellations, then we need to look at the last 
+            // flags of this block of 8 bytes and the first flags of the next one.
+            // we do this by loading the trailing bits of this block into a carry
+            // register.  The rest is handled by the block analysis function.
+            // For the first block in a multi-threaded run, we should also
+            // be receiving carry data from the previous thread in order to
+            // maintain continuity across threads.
+
+            if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
+            {
+                uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
+                uint8_t* firstline = sdata->lines[0];
+
+                if ((i + 1) < numchunks)
+                {
+                    uint8_t lastflag = lastline[(uint64_t)(t->startid + i) * 8 + 7] & 0x80;
+                    uint8_t firstflag = firstline[(uint64_t)(t->startid + i) * 8 + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        count++;
+                    }
+                }
+                else if ((i + 1) < sdata->numlinebytes)
+                {
+                    // this thread is done but if there is more data after
+                    // this thread's chunk then check between thread boundaries.
+                    uint8_t lastflag = lastline[(uint64_t)(t->startid + i) * 8 + 7] & 0x80;
+                    uint8_t firstflag = firstline[(uint64_t)(t->startid + i) * 8 + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        count++;
+                    }
+                }
+            }
+        }
+    }
+#else
+    for (i = 0; i < numchunks; i++)
+    {
+        count = count_8_bytes(sdata, count, (uint64_t)(t->startid + i) * 8);
+
+        // if searching for prime constellations, then we need to look at the last 
+        // flags of this block of 8 bytes and the first flags of the next one.
+        // we do this by loading the trailing bits of this block into a carry
+        // register.  The rest is handled by the block analysis function.
+        // For the first block in a multi-threaded run, we should also
+        // be receiving carry data from the previous thread in order to
+        // maintain continuity across threads.
+
+        if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
+        {
+            uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
+            uint8_t* firstline = sdata->lines[0];
+
+            if ((i + 1) < numchunks)
+            {
+                uint8_t lastflag = lastline[(uint64_t)(t->startid + i) * 8 + 7] & 0x80;
+                uint8_t firstflag = firstline[(uint64_t)(t->startid + i) * 8 + 8] & 0x1;
+
+                if (lastflag && firstflag)
+                {
+                    count++;
+                }
+            }
+            else if ((t->startid + i + 1) < sdata->numlinebytes)
+            {
+                // this thread is done but if there is more data after
+                // this thread's chunk then check between thread boundaries.
+                uint8_t lastflag = lastline[(uint64_t)(t->startid + i) * 8 + 7] & 0x80;
+                uint8_t firstflag = firstline[(uint64_t)(t->startid + i) * 8 + 8] & 0x1;
+
+                if (lastflag && firstflag)
+                {
+                    count++;
+                }
+            }
+        }
+    }
+#endif
+
+    t->linecount = count;
+
+    return;
+}
 
 uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
 {
@@ -143,7 +318,121 @@ uint64_t count_line(soe_staticdata_t *sdata, uint32_t current_line)
 	return it;
 }
 
-uint64_t count_twins(soe_staticdata_t* sdata)
+uint64_t count_twins(soe_staticdata_t* sdata, thread_soedata_t* thread_data)
+{
+    // compute twins using all of the sieved lines we have stored
+    uint32_t pcount = 0;
+    uint64_t i;
+    int j;
+    uint32_t range, lastid;
+
+    //timing
+    double t;
+    struct timeval tstart, tstop;
+
+    // threading structures
+    tpool_t* tpool_data;
+    soe_userdata_t udata;
+
+    if (sdata->VFLAG > 1)
+    {
+        gettimeofday(&tstart, NULL);
+    }
+
+    // total number of 64-bit chunks needed
+    uint32_t numchunks = (sdata->orig_hlimit - sdata->lowlimit) / (64 * sdata->prodN) + 1;
+    range = numchunks / sdata->THREADS;
+    lastid = 0;
+
+    if (sdata->VFLAG > 1)
+    {
+        printf("counting twins from %lu to %lu\n", sdata->orig_llimit, sdata->orig_hlimit);
+    }
+
+    // divvy up the line bytes.  Unlike when counting primes,
+    // here threading is by groups of bytes, over all classes.
+    // this is necessary to order the primes.
+    for (i = 0; i < sdata->THREADS; i++)
+    {
+        thread_soedata_t* t = thread_data + i;
+
+        t->sdata = *sdata;
+        t->startid = lastid;
+        t->stopid = t->startid + range;
+
+        if (i == (sdata->THREADS - 1))
+        {
+            t->stopid = numchunks;
+        }
+        lastid = t->stopid;
+
+        if (sdata->VFLAG > 2)
+        {
+            printf("thread %d counting twins from byte offset %u to %u\n",
+                (int)i, t->startid * 8, t->stopid * 8);
+        }
+    }
+
+    udata.sdata = sdata;
+    udata.ddata = thread_data;
+    tpool_data = tpool_setup(sdata->THREADS, NULL, NULL, NULL,
+        &count_twins_dispatch, &udata);
+
+    if (sdata->THREADS == 1)
+    {
+        thread_data->linecount = 0;
+        count_twins_work_fcn(tpool_data);
+    }
+    else
+    {
+        sdata->sync_count = 0;
+        tpool_add_work_fcn(tpool_data, &count_twins_work_fcn);
+        tpool_go(tpool_data);
+    }
+    free(tpool_data);
+
+    // now combine all of the results
+    if (sdata->THREADS > 1)
+    {
+        pcount = 0;
+        for (j = 0; j < sdata->THREADS; j++)
+        {
+            thread_soedata_t* t = thread_data + j;
+
+            if (t->linecount == 0)
+            {
+                continue;
+            }
+
+            if (sdata->VFLAG > 2)
+            {
+                printf("adding %" PRIu64 " twins found in thread %d\n", t->linecount, j);
+            }
+
+            pcount += t->linecount;
+        }
+    }
+    else
+    {
+        pcount = thread_data[0].linecount;
+    }
+
+    if (sdata->VFLAG > 1)
+    {
+        gettimeofday(&tstop, NULL);
+
+        t = ytools_difftime(&tstart, &tstop);
+
+        if (sdata->VFLAG > 2)
+        {
+            printf("time to count twins = %1.4f\n", t);
+        }
+    }
+
+    return pcount;
+}
+
+uint64_t count_twins_nonthreaded(soe_staticdata_t* sdata)
 {
     int i;
     uint64_t lowlimit = sdata->lowlimit;
@@ -200,9 +489,7 @@ uint64_t count_twins(soe_staticdata_t* sdata)
     }
     else
     {
-        // if we don't have BMI2, or numclasses > 48, or we're doing a more
-        // complicated analysis, then we should end up here.
-        
+        // if we don't have BMI2, or numclasses > 48, then we should end up here.
         for (i = 0; i < numchunks; i++)
         {
             count = count_8_bytes(sdata, count, (uint64_t)i * 8);
@@ -246,9 +533,46 @@ uint64_t count_twins(soe_staticdata_t* sdata)
         }
     }
 #else
-    for (i = t->startid; i < t->stopid; i += 8)
+    for (i = 0; i < numchunks; i++)
     {
-        t->linecount = compute_8_bytes(sdata, t->linecount, t->ddata.primes, i);
+        count = count_8_bytes(sdata, count, (uint64_t)i * 8);
+
+        // if searching for prime constellations, then we need to look at the last 
+        // flags of this block of 8 bytes and the first flags of the next one.
+        // we do this by loading the trailing bits of this block into a carry
+        // register.  The rest is handled by the block analysis function.
+        // For the first block in a multi-threaded run, we should also
+        // be receiving carry data from the previous thread in order to
+        // maintain continuity across threads.
+
+        if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
+        {
+            uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
+            uint8_t* firstline = sdata->lines[0];
+
+            if ((i + 1) < numchunks)
+            {
+                uint8_t lastflag = lastline[i * 8 + 7] & 0x80;
+                uint8_t firstflag = firstline[i * 8 + 8] & 0x1;
+
+                if (lastflag && firstflag)
+                {
+                    count++;
+                }
+            }
+            else if ((i + 1) < sdata->numlinebytes)
+            {
+                // this thread is done but if there is more data after
+                // this thread's chunk then check between thread boundaries.
+                uint8_t lastflag = lastline[i * 8 + 7] & 0x80;
+                uint8_t firstflag = firstline[i * 8 + 8] & 0x1;
+
+                if (lastflag && firstflag)
+                {
+                    count++;
+                }
+            }
+        }
     }
 #endif
 
@@ -497,6 +821,17 @@ __inline uint64_t interleave_pdep_8x8(uint8_t x1,
 #define BIT6 0x40
 #define BIT7 0x80
 
+#define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
+#define BYTE_TO_BINARY(byte)  \
+  ((byte) & 0x01 ? '1' : '0'), \
+  ((byte) & 0x02 ? '1' : '0'), \
+  ((byte) & 0x04 ? '1' : '0'), \
+  ((byte) & 0x08 ? '1' : '0'), \
+  ((byte) & 0x10 ? '1' : '0'), \
+  ((byte) & 0x20 ? '1' : '0'), \
+  ((byte) & 0x40 ? '1' : '0'), \
+  ((byte) & 0x80 ? '1' : '0') 
+
 uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
     uint64_t pcount, uint64_t byte_offset)
 {
@@ -584,12 +919,20 @@ uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
         int i;
         uint32_t last_bit = 0;
 
-        // align the current bytes in next 8 residue classes
         for (i = 0; i < 8; i++)
         {
-            uint64_t aligned_flags;
+            uint64_t aligned_flags1;
+            uint64_t aligned_flags2;
+            uint64_t aligned_flags3;
+            uint64_t aligned_flags4;
+            uint64_t aligned_flags5;
+            uint64_t aligned_flags6;
 
-            aligned_flags = interleave_pdep_8x8(lines[0][byte_offset + i],
+            // first we partially order the lines such
+            // that each 64-bit flags contains 8 ordered
+            // bytes for a set of 8 classes.
+            aligned_flags1 = interleave_pdep_8x8(
+                lines[0][byte_offset + i],
                 lines[1][byte_offset + i],
                 lines[2][byte_offset + i],
                 lines[3][byte_offset + i],
@@ -598,14 +941,371 @@ uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
                 lines[6][byte_offset + i],
                 lines[7][byte_offset + i]);
 
-            uint64_t twins = aligned_flags & (aligned_flags >> 1);
+            aligned_flags2 = interleave_pdep_8x8(
+                lines[8 + 0][byte_offset + i],
+                lines[8 + 1][byte_offset + i],
+                lines[8 + 2][byte_offset + i],
+                lines[8 + 3][byte_offset + i],
+                lines[8 + 4][byte_offset + i],
+                lines[8 + 5][byte_offset + i],
+                lines[8 + 6][byte_offset + i],
+                lines[8 + 7][byte_offset + i]);
 
-            twins &= 0x9494949494949494ULL;
+            aligned_flags3 = interleave_pdep_8x8(
+                lines[16 + 0][byte_offset + i],
+                lines[16 + 1][byte_offset + i],
+                lines[16 + 2][byte_offset + i],
+                lines[16 + 3][byte_offset + i],
+                lines[16 + 4][byte_offset + i],
+                lines[16 + 5][byte_offset + i],
+                lines[16 + 6][byte_offset + i],
+                lines[16 + 7][byte_offset + i]);
 
+            aligned_flags4 = interleave_pdep_8x8(
+                lines[24 + 0][byte_offset + i],
+                lines[24 + 1][byte_offset + i],
+                lines[24 + 2][byte_offset + i],
+                lines[24 + 3][byte_offset + i],
+                lines[24 + 4][byte_offset + i],
+                lines[24 + 5][byte_offset + i],
+                lines[24 + 6][byte_offset + i],
+                lines[24 + 7][byte_offset + i]);
+
+            aligned_flags5 = interleave_pdep_8x8(
+                lines[32 + 0][byte_offset + i],
+                lines[32 + 1][byte_offset + i],
+                lines[32 + 2][byte_offset + i],
+                lines[32 + 3][byte_offset + i],
+                lines[32 + 4][byte_offset + i],
+                lines[32 + 5][byte_offset + i],
+                lines[32 + 6][byte_offset + i],
+                lines[32 + 7][byte_offset + i]);
+
+            aligned_flags6 = interleave_pdep_8x8(
+                lines[40 + 0][byte_offset + i],
+                lines[40 + 1][byte_offset + i],
+                lines[40 + 2][byte_offset + i],
+                lines[40 + 3][byte_offset + i],
+                lines[40 + 4][byte_offset + i],
+                lines[40 + 5][byte_offset + i],
+                lines[40 + 6][byte_offset + i],
+                lines[40 + 7][byte_offset + i]);
+
+            // aligned_flags1 contains: b0(c0-7), b1(c0-7), b2(c0-7), ... b7(c0-7)
+            // aligned_flags2 contains: b0(c8-15), b1(c8-15), b2(c8-15), ... b7(c8-15)
+            // aligned_flags3 contains: b0(c16-23), b1(c16-23), b2(c16-23), ... b7(c16-23)
+            // aligned_flags4 contains: b0(c24-31), b1(c24-31), b2(c24-31), ... b7(c24-31)
+            // aligned_flags5 contains: b0(c32-39), b1(c32-39), b2(c32-39), ... b7(c32-39)
+            // aligned_flags6 contains: b0(c40-47), b1(c40-47), b2(c40-47), ... b7(c40-47)
+             
+            // now, shuffle the bytes within the partially ordered chunks.
+            uint8_t unordered_bytes[48];
+            uint8_t ordered_bytes[64];
+            uint64_t* unordered64 = (uint64_t*)unordered_bytes;
+            uint64_t* ordered64 = (uint64_t*)ordered_bytes;
+            unordered64[0] = aligned_flags1;
+            unordered64[1] = aligned_flags2;
+            unordered64[2] = aligned_flags3;
+            unordered64[3] = aligned_flags4;
+            unordered64[4] = aligned_flags5;
+            unordered64[5] = aligned_flags6;
+
+#if 1
+            // minimum masks steps:
+            ordered_bytes[0] = unordered_bytes[0];
+            ordered_bytes[1] = unordered_bytes[8];
+            ordered_bytes[2] = unordered_bytes[16];
+            ordered_bytes[3] = unordered_bytes[24];
+            ordered_bytes[4] = unordered_bytes[32];
+            ordered_bytes[5] = unordered_bytes[40];
+            ordered_bytes[6] = unordered_bytes[1];
+            ordered_bytes[7] = unordered_bytes[9];
+
+            ordered_bytes[8] = unordered_bytes[17];
+            ordered_bytes[9] = unordered_bytes[25];
+            ordered_bytes[10] = unordered_bytes[33];
+            ordered_bytes[11] = unordered_bytes[41];
+            ordered_bytes[12] = unordered_bytes[02];
+            ordered_bytes[13] = unordered_bytes[10];
+            ordered_bytes[14] = unordered_bytes[18];
+            ordered_bytes[15] = unordered_bytes[26];
+
+            ordered_bytes[16] = unordered_bytes[34];
+            ordered_bytes[17] = unordered_bytes[42];
+            ordered_bytes[18] = unordered_bytes[3];
+            ordered_bytes[19] = unordered_bytes[11];
+            ordered_bytes[20] = unordered_bytes[19];
+            ordered_bytes[21] = unordered_bytes[27];
+            ordered_bytes[22] = unordered_bytes[35];
+            ordered_bytes[23] = unordered_bytes[43];
+
+            ordered_bytes[24] = unordered_bytes[4];
+            ordered_bytes[25] = unordered_bytes[12];
+            ordered_bytes[26] = unordered_bytes[20];
+            ordered_bytes[27] = unordered_bytes[28];
+            ordered_bytes[28] = unordered_bytes[36];
+            ordered_bytes[29] = unordered_bytes[44];
+            ordered_bytes[30] = unordered_bytes[5];
+            ordered_bytes[31] = unordered_bytes[13];
+
+            ordered_bytes[32] = unordered_bytes[21];
+            ordered_bytes[33] = unordered_bytes[29];
+            ordered_bytes[34] = unordered_bytes[37];
+            ordered_bytes[35] = unordered_bytes[45];
+            ordered_bytes[36] = unordered_bytes[6];
+            ordered_bytes[37] = unordered_bytes[14];
+            ordered_bytes[38] = unordered_bytes[22];
+            ordered_bytes[39] = unordered_bytes[30];
+
+            ordered_bytes[40] = unordered_bytes[38];
+            ordered_bytes[41] = unordered_bytes[46];
+            ordered_bytes[42] = unordered_bytes[7];
+            ordered_bytes[43] = unordered_bytes[15];
+            ordered_bytes[44] = unordered_bytes[23];
+            ordered_bytes[45] = unordered_bytes[31];
+            ordered_bytes[46] = unordered_bytes[39];
+            ordered_bytes[47] = unordered_bytes[47];
+
+            aligned_flags1 = ordered64[0];
+            aligned_flags2 = ordered64[1];
+            aligned_flags3 = ordered64[2];
+            aligned_flags4 = ordered64[3];
+            aligned_flags5 = ordered64[4];
+            aligned_flags6 = ordered64[5];
+
+
+
+            // twin-mask for 48 classes.
+            // residue classes mod 210:
+            // 1                     0
+            // 11 13 *               1 0
+            // 17 19 *               1 0
+            // 23                    0
+            // 29 31 *               1 0
+            // 37                    0
+            // 41 43 *               1 0
+            // 47 53                 0 0
+            // 59 61 *               1 0
+            // 67                    0          -- 224A
+            // 71 73 *               1 0
+            // 79 83 89 97           0 0 0 0
+            // 101 103 *             1 0
+            // 107 109 *             1 0
+            // 113 121 127 131       0 0 0 0
+            // 137 139 *             1 0        -- 4141
+            // 143                   0
+            // 149 151 *             1 0
+            // 157 163               0 0 
+            // 167 169 *             1 0 
+            // 173                   0
+            // 179 181 *             1 0
+            // 187                   0
+            // 191 193 *             1 0
+            // 197 199 *             1 0
+            // 209 *                 1          -- A922
+
+            // 48-bit mask = 0xA9224141224A;
+            // repeat that 6 times and split into 64-bit chunks
+            // to go with the ordered flags:
+
+            uint64_t twins = aligned_flags1 & (aligned_flags1 >> 1);
+            twins &= 0x224AA9224141224Aull;
             pcount += _mm_popcnt_u64(twins);
-            pcount += (last_bit & aligned_flags);
+            pcount += (last_bit & aligned_flags1);  // from previous chunk
+                                                    // no carry generated
 
-            last_bit = (aligned_flags >> 63);
+            twins = aligned_flags2 & (aligned_flags2 >> 1);
+            twins &= 0x4141224AA9224141ull;
+            pcount += _mm_popcnt_u64(twins);        // no carry generated
+
+            twins = aligned_flags3 & (aligned_flags3 >> 1);
+            twins &= 0xA9224141224AA922ull;
+            pcount += _mm_popcnt_u64(twins);
+            last_bit = (aligned_flags3 >> 63);      // generate carry
+
+            twins = aligned_flags4 & (aligned_flags4 >> 1);
+            twins &= 0x224AA9224141224Aull;
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags4);  // from previous chunk
+                                                    // no carry generated
+
+            twins = aligned_flags5 & (aligned_flags5 >> 1);
+            twins &= 0x4141224AA9224141ull;
+            pcount += _mm_popcnt_u64(twins);        // no carry generated
+
+            twins = aligned_flags6 & (aligned_flags6 >> 1);
+            twins &= 0xA9224141224AA922ull;
+            pcount += _mm_popcnt_u64(twins);
+            last_bit = (aligned_flags6 >> 63);      // generate carry
+
+#else
+
+            uint64_t aligned_flags7;
+            uint64_t aligned_flags8;
+
+            ordered_bytes[0] = unordered_bytes[0];
+            ordered_bytes[1] = unordered_bytes[8];
+            ordered_bytes[2] = unordered_bytes[16];
+            ordered_bytes[3] = unordered_bytes[24];
+            ordered_bytes[4] = unordered_bytes[32];
+            ordered_bytes[5] = unordered_bytes[40];
+            ordered_bytes[6] = 0;
+            ordered_bytes[7] = 0;
+
+            ordered_bytes[8] = unordered_bytes[1];
+            ordered_bytes[9] = unordered_bytes[9];
+            ordered_bytes[10] = unordered_bytes[17];
+            ordered_bytes[11] = unordered_bytes[25];
+            ordered_bytes[12] = unordered_bytes[33];
+            ordered_bytes[13] = unordered_bytes[41];
+            ordered_bytes[14] = 0;
+            ordered_bytes[15] = 0;
+
+            ordered_bytes[16] = unordered_bytes[2];
+            ordered_bytes[17] = unordered_bytes[10];
+            ordered_bytes[18] = unordered_bytes[18];
+            ordered_bytes[19] = unordered_bytes[26];
+            ordered_bytes[20] = unordered_bytes[34];
+            ordered_bytes[21] = unordered_bytes[42];
+            ordered_bytes[22] = 0;
+            ordered_bytes[23] = 0;
+
+            ordered_bytes[24] = unordered_bytes[3];
+            ordered_bytes[25] = unordered_bytes[11];
+            ordered_bytes[26] = unordered_bytes[19];
+            ordered_bytes[27] = unordered_bytes[27];
+            ordered_bytes[28] = unordered_bytes[35];
+            ordered_bytes[29] = unordered_bytes[43];
+            ordered_bytes[30] = 0;
+            ordered_bytes[31] = 0;
+
+            ordered_bytes[32] = unordered_bytes[4];
+            ordered_bytes[33] = unordered_bytes[12];
+            ordered_bytes[34] = unordered_bytes[20];
+            ordered_bytes[35] = unordered_bytes[28];
+            ordered_bytes[36] = unordered_bytes[36];
+            ordered_bytes[37] = unordered_bytes[44];
+            ordered_bytes[38] = 0;
+            ordered_bytes[39] = 0;
+
+            ordered_bytes[40] = unordered_bytes[5];
+            ordered_bytes[41] = unordered_bytes[13];
+            ordered_bytes[42] = unordered_bytes[21];
+            ordered_bytes[43] = unordered_bytes[29];
+            ordered_bytes[44] = unordered_bytes[37];
+            ordered_bytes[45] = unordered_bytes[45];
+            ordered_bytes[46] = 0;
+            ordered_bytes[47] = 0;
+
+            ordered_bytes[48] = unordered_bytes[6];
+            ordered_bytes[49] = unordered_bytes[14];
+            ordered_bytes[50] = unordered_bytes[22];
+            ordered_bytes[51] = unordered_bytes[30];
+            ordered_bytes[52] = unordered_bytes[38];
+            ordered_bytes[53] = unordered_bytes[46];
+            ordered_bytes[54] = 0;
+            ordered_bytes[55] = 0;
+
+            ordered_bytes[56] = unordered_bytes[7];
+            ordered_bytes[57] = unordered_bytes[15];
+            ordered_bytes[58] = unordered_bytes[23];
+            ordered_bytes[59] = unordered_bytes[31];
+            ordered_bytes[60] = unordered_bytes[39];
+            ordered_bytes[61] = unordered_bytes[47];
+            ordered_bytes[62] = 0;
+            ordered_bytes[63] = 0;
+
+            aligned_flags1 = ordered64[0];
+            aligned_flags2 = ordered64[1];
+            aligned_flags3 = ordered64[2];
+            aligned_flags4 = ordered64[3];
+            aligned_flags5 = ordered64[4];
+            aligned_flags6 = ordered64[5];
+            aligned_flags7 = ordered64[6];
+            aligned_flags8 = ordered64[7];
+
+            // twin-mask for 48 classes.
+            // residue classes mod 210:
+            // 1                     0
+            // 11 13 *               1 0
+            // 17 19 *               1 0
+            // 23                    0
+            // 29 31 *               1 0
+            // 37                    0
+            // 41 43 *               1 0
+            // 47 53                 0 0
+            // 59 61 *               1 0
+            // 67                    0
+            // 71 73 *               1 0
+            // 79 83 89 97           0 0 0 0
+            // 101 103 *             1 0
+            // 107 109 *             1 0
+            // 113 121 127 131       0 0 0 0
+            // 137 139 *             1 0
+            // 143                   0
+            // 149 151 *             1 0
+            // 157 163               0 0 
+            // 167 169 *             1 0 
+            // 173                   0
+            // 179 181 *             1 0
+            // 187                   0
+            // 191 193 *             1 0
+            // 197 199 *             1 0
+            // 209 *                 1
+
+            // can skip classes: 5 8 11 12 15 18 19 20 21 26 27 28 29 32 35 36 39 42 
+
+            // 48-bit mask = 0xA9224141224A;
+
+            uint64_t twins = aligned_flags1 & (aligned_flags1 >> 1);
+            twins &= 0xA9224141224Aull;
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags1);
+            last_bit = (aligned_flags1 >> 47);
+
+            twins = aligned_flags2 & (aligned_flags2 >> 1);
+            twins &= 0xA9224141224Aull;
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags2);
+            last_bit = (aligned_flags2 >> 47);
+
+            twins = aligned_flags3 & (aligned_flags3 >> 1);
+            twins &= 0xA9224141224Aull;
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags3);
+            last_bit = (aligned_flags3 >> 47);
+
+            twins = aligned_flags4 & (aligned_flags4 >> 1);
+            twins &= 0xA9224141224Aull;
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags4);
+            last_bit = (aligned_flags4 >> 47);
+
+            twins = aligned_flags5 & (aligned_flags5 >> 1);
+            twins &= 0xA9224141224Aull;
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags5);
+            last_bit = (aligned_flags5 >> 47);
+
+            twins = aligned_flags6 & (aligned_flags6 >> 1);
+            twins &= 0xA9224141224Aull;
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags6);
+            last_bit = (aligned_flags6 >> 47);
+
+            twins = aligned_flags7 & (aligned_flags7 >> 1);
+            twins &= 0xA9224141224Aull;
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags7);
+            last_bit = (aligned_flags7 >> 47);
+
+            twins = aligned_flags8 & (aligned_flags8 >> 1);
+            twins &= 0xA9224141224Aull;
+            pcount += _mm_popcnt_u64(twins);
+            pcount += (last_bit & aligned_flags8);
+            last_bit = (aligned_flags8 >> 47);
+#endif
+            
         }
     }
     else

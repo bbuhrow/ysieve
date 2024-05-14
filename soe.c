@@ -108,8 +108,49 @@ void sieve_work_fcn(void *vptr)
     if ((sdata->only_count == 0) || (sdata->analysis > 1) || (sdata->num_bitmap_primes > 0))
     {
         // if we are computing primes (not just counting) or if
-        // bitmap sieving is enabled then we need to keep all lines
+        // bitmap sieving is enabled or if we're doing an analysis
+        // that requires ordering, then we need to keep all lines
         // in memory at once.
+
+        if ((sdata->analysis == 2) && (sdata->is_main_sieve))
+        {
+            // if counting/computing twins, then some residue classes can be
+            // skipped entirely as they are never involved in a twin.
+            if ((sdata->numclasses == 8) && ((t->current_line == 1) || (t->current_line == 6)))
+            {
+                t->ddata.min_sieved_val = (1 << 31) - 1;
+                return;
+            }
+
+            if (sdata->numclasses == 48)
+            {
+                // can skip classes: 5 8 11 12 15 18 19 20 21 26 27 28 29 32 35 36 39 42 
+                switch (t->current_line)
+                {
+                case 5:
+                case 8:
+                case 11:
+                case 12:
+                case 15:
+                case 18:
+                case 19:
+                case 20:
+                case 21:
+                case 26:
+                case 27:
+                case 28:
+                case 29:
+                case 32:
+                case 35:
+                case 36:
+                case 39:
+                case 42:
+                    t->ddata.min_sieved_val = (1 << 31) - 1;
+                    return;
+                }
+            }
+        }
+
         sieve_line_ptr(t);
         trim_line(sdata, t->current_line);
         t->linecount = count_line(&t->sdata, t->current_line);
@@ -992,12 +1033,13 @@ void finalize_sieve(soe_staticdata_t *sdata,
 		// load in the sieve primes that we need
         // printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
         // printf("bucket_start_id = %u\n", sdata->bucket_start_id);
-
         if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
         {
             // count twins from the stored sieve lines
-            num_p = count_twins(sdata);
+            num_p = count_twins(sdata, thread_data);
 
+            // printf("main sieve found %lu twins, adding twins within sieve primes\n", num_p);
+            i = 0;
             while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
             {
                 // if we are doing twin prime or prime gap analysis 
