@@ -796,6 +796,42 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
         }
     }
 
+    if ((sdata->is_main_sieve == 1) && (sdata->analysis == 2))
+    {
+        int i, k;
+        k = 0;
+        int prev = 0;
+        //printf("twin residues mod %d:\n", prodN);
+        for (i = 1; i < prodN; i++)
+        {
+            if (gcd_1(i, (uint64_t)prodN) == 1)
+            {
+                if ((i == 1) || (i == (prodN - 1)))
+                {
+                    //printf("%d ", i);
+                    sdata->rclass[k] = (uint32_t)i;
+                    k++;
+                    //if (k % 10 == 0) printf("\n");
+                }
+                else if ((i - prev) == 2)
+                {
+                    //printf("%d %d ", prev, i);
+                    sdata->rclass[k] = (uint32_t)prev;
+                    k++;
+                    sdata->rclass[k] = (uint32_t)i;
+                    k++;
+                    //if (k % 10 == 0) printf("\n");
+                }
+                prev = i;
+            }
+        }
+        sdata->numclasses = k;
+        //printf("\n");
+        printf("%d twin residues for product %d\n", k, prodN);
+        //exit(0);
+    }
+
+
     sdata->min_sieved_val = 1ULL << 63;
 
     // temporarily set lowlimit to the first multiple of numclasses*prodN < lowlimit
