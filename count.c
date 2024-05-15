@@ -68,9 +68,10 @@ void count_twins_work_fcn(void* vptr)
 
 
     // counting twins and other prime constellations requires
-        // all of the sieve lines in memory for reording.
+    // all of the sieve lines in memory for reording.
 #if defined(USE_BMI2) || defined(USE_AVX512F)
-    if ((sdata->has_bmi2) && (sdata->numclasses <= 48))
+    if ((sdata->has_bmi2) && (sdata->numclasses <= 270) && (!(sdata->numclasses == 96))) 
+        // && (!(sdata->analysis > 1)))
     {
         for (i = 0; i < numchunks; i++)
         {
@@ -80,10 +81,6 @@ void count_twins_work_fcn(void* vptr)
             // flags of this block of 8 bytes and the first flags of the next one.
             // we do this by loading the trailing bits of this block into a carry
             // register.  The rest is handled by the block analysis function.
-            // For the first block in a multi-threaded run, we should also
-            // be receiving carry data from the previous thread in order to
-            // maintain continuity across threads.
-
             if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
             {
                 uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
@@ -116,7 +113,8 @@ void count_twins_work_fcn(void* vptr)
     }
     else
     {
-        // if we don't have BMI2, or numclasses > 48, then we should end up here.
+        // if we don't have BMI2, or an unsupported-by-bmi2-numclasses, 
+        // then we will end up here.
         for (i = 0; i < numchunks; i++)
         {
             count = count_8_bytes(sdata, count, (uint64_t)(t->startid + i) * 8);
@@ -125,10 +123,6 @@ void count_twins_work_fcn(void* vptr)
             // flags of this block of 8 bytes and the first flags of the next one.
             // we do this by loading the trailing bits of this block into a carry
             // register.  The rest is handled by the block analysis function.
-            // For the first block in a multi-threaded run, we should also
-            // be receiving carry data from the previous thread in order to
-            // maintain continuity across threads.
-
             if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
             {
                 uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
@@ -168,10 +162,6 @@ void count_twins_work_fcn(void* vptr)
         // flags of this block of 8 bytes and the first flags of the next one.
         // we do this by loading the trailing bits of this block into a carry
         // register.  The rest is handled by the block analysis function.
-        // For the first block in a multi-threaded run, we should also
-        // be receiving carry data from the previous thread in order to
-        // maintain continuity across threads.
-
         if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
         {
             uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
@@ -986,7 +976,6 @@ uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
             unordered64[2] = aligned_flags3;
             unordered64[3] = aligned_flags4;
 
-#if 1
             ordered_bytes[0] = unordered_bytes[0];
             ordered_bytes[1] = unordered_bytes[8];
             ordered_bytes[2] = unordered_bytes[16];
@@ -1023,6 +1012,8 @@ uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
             ordered_bytes[30] = unordered_bytes[23];
             ordered_bytes[31] = unordered_bytes[31];
 
+            // rotate 2 bits for continuity between
+            // the two 30-bit sections.
             ordered32[0] |= ((ordered32[1] & 0x3) << 30);
             ordered32[2] |= ((ordered32[3] & 0x3) << 30);
             ordered32[4] |= ((ordered32[5] & 0x3) << 30);
@@ -1040,7 +1031,7 @@ uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
             // twin residues mod 210:
             // 1 11 13 17 19 29 31 41 43 59 61 71 73 101 103 107 109 137 139 149 151 167 169 179 181 191 193 197 199 209
             // binary mask: 0101 0101 0101 0101 0101 0101 0101 01|01 0101 0101 0101 0101 0101 0101 0100
-            // hex mask: AAAAAAA8AAAAAA20
+            // hex mask: AAAAAAAAAAAAAA20
 
             uint64_t twins = aligned_flags1 & (aligned_flags1 >> 1);
             twins &= 0x02AAAAAAAAAAAAAAull;
@@ -1050,7 +1041,7 @@ uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
 
             twins = aligned_flags2 & (aligned_flags2 >> 1);
             twins &= 0x02AAAAAAAAAAAAAAull;
-            pcount += _mm_popcnt_u64(twins);        // no carry generated
+            pcount += _mm_popcnt_u64(twins);        
             pcount += (last_bit & aligned_flags2);  // from previous chunk
             last_bit = (aligned_flags2 >> 59);      // generate carry
 
@@ -1066,174 +1057,6 @@ uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
             pcount += (last_bit & aligned_flags4);  // from previous chunk
             last_bit = (aligned_flags4 >> 59);      // generate carry
 
-
-#else
-
-            uint64_t aligned_flags7;
-            uint64_t aligned_flags8;
-
-            ordered_bytes[0] = unordered_bytes[0];
-            ordered_bytes[1] = unordered_bytes[8];
-            ordered_bytes[2] = unordered_bytes[16];
-            ordered_bytes[3] = unordered_bytes[24];
-            ordered_bytes[4] = unordered_bytes[32];
-            ordered_bytes[5] = unordered_bytes[40];
-            ordered_bytes[6] = 0;
-            ordered_bytes[7] = 0;
-
-            ordered_bytes[8] = unordered_bytes[1];
-            ordered_bytes[9] = unordered_bytes[9];
-            ordered_bytes[10] = unordered_bytes[17];
-            ordered_bytes[11] = unordered_bytes[25];
-            ordered_bytes[12] = unordered_bytes[33];
-            ordered_bytes[13] = unordered_bytes[41];
-            ordered_bytes[14] = 0;
-            ordered_bytes[15] = 0;
-
-            ordered_bytes[16] = unordered_bytes[2];
-            ordered_bytes[17] = unordered_bytes[10];
-            ordered_bytes[18] = unordered_bytes[18];
-            ordered_bytes[19] = unordered_bytes[26];
-            ordered_bytes[20] = unordered_bytes[34];
-            ordered_bytes[21] = unordered_bytes[42];
-            ordered_bytes[22] = 0;
-            ordered_bytes[23] = 0;
-
-            ordered_bytes[24] = unordered_bytes[3];
-            ordered_bytes[25] = unordered_bytes[11];
-            ordered_bytes[26] = unordered_bytes[19];
-            ordered_bytes[27] = unordered_bytes[27];
-            ordered_bytes[28] = unordered_bytes[35];
-            ordered_bytes[29] = unordered_bytes[43];
-            ordered_bytes[30] = 0;
-            ordered_bytes[31] = 0;
-
-            ordered_bytes[32] = unordered_bytes[4];
-            ordered_bytes[33] = unordered_bytes[12];
-            ordered_bytes[34] = unordered_bytes[20];
-            ordered_bytes[35] = unordered_bytes[28];
-            ordered_bytes[36] = unordered_bytes[36];
-            ordered_bytes[37] = unordered_bytes[44];
-            ordered_bytes[38] = 0;
-            ordered_bytes[39] = 0;
-
-            ordered_bytes[40] = unordered_bytes[5];
-            ordered_bytes[41] = unordered_bytes[13];
-            ordered_bytes[42] = unordered_bytes[21];
-            ordered_bytes[43] = unordered_bytes[29];
-            ordered_bytes[44] = unordered_bytes[37];
-            ordered_bytes[45] = unordered_bytes[45];
-            ordered_bytes[46] = 0;
-            ordered_bytes[47] = 0;
-
-            ordered_bytes[48] = unordered_bytes[6];
-            ordered_bytes[49] = unordered_bytes[14];
-            ordered_bytes[50] = unordered_bytes[22];
-            ordered_bytes[51] = unordered_bytes[30];
-            ordered_bytes[52] = unordered_bytes[38];
-            ordered_bytes[53] = unordered_bytes[46];
-            ordered_bytes[54] = 0;
-            ordered_bytes[55] = 0;
-
-            ordered_bytes[56] = unordered_bytes[7];
-            ordered_bytes[57] = unordered_bytes[15];
-            ordered_bytes[58] = unordered_bytes[23];
-            ordered_bytes[59] = unordered_bytes[31];
-            ordered_bytes[60] = unordered_bytes[39];
-            ordered_bytes[61] = unordered_bytes[47];
-            ordered_bytes[62] = 0;
-            ordered_bytes[63] = 0;
-
-            aligned_flags1 = ordered64[0];
-            aligned_flags2 = ordered64[1];
-            aligned_flags3 = ordered64[2];
-            aligned_flags4 = ordered64[3];
-            aligned_flags5 = ordered64[4];
-            aligned_flags6 = ordered64[5];
-            aligned_flags7 = ordered64[6];
-            aligned_flags8 = ordered64[7];
-
-            // twin-mask for 48 classes.
-            // residue classes mod 210:
-            // 1                     0
-            // 11 13 *               1 0
-            // 17 19 *               1 0
-            // 23                    0
-            // 29 31 *               1 0
-            // 37                    0
-            // 41 43 *               1 0
-            // 47 53                 0 0
-            // 59 61 *               1 0
-            // 67                    0
-            // 71 73 *               1 0
-            // 79 83 89 97           0 0 0 0
-            // 101 103 *             1 0
-            // 107 109 *             1 0
-            // 113 121 127 131       0 0 0 0
-            // 137 139 *             1 0
-            // 143                   0
-            // 149 151 *             1 0
-            // 157 163               0 0 
-            // 167 169 *             1 0 
-            // 173                   0
-            // 179 181 *             1 0
-            // 187                   0
-            // 191 193 *             1 0
-            // 197 199 *             1 0
-            // 209 *                 1
-
-            // can skip classes: 5 8 11 12 15 18 19 20 21 26 27 28 29 32 35 36 39 42 
-
-            // 48-bit mask = 0xA9224141224A;
-
-            uint64_t twins = aligned_flags1 & (aligned_flags1 >> 1);
-            twins &= 0xA9224141224Aull;
-            pcount += _mm_popcnt_u64(twins);
-            pcount += (last_bit & aligned_flags1);
-            last_bit = (aligned_flags1 >> 47);
-
-            twins = aligned_flags2 & (aligned_flags2 >> 1);
-            twins &= 0xA9224141224Aull;
-            pcount += _mm_popcnt_u64(twins);
-            pcount += (last_bit & aligned_flags2);
-            last_bit = (aligned_flags2 >> 47);
-
-            twins = aligned_flags3 & (aligned_flags3 >> 1);
-            twins &= 0xA9224141224Aull;
-            pcount += _mm_popcnt_u64(twins);
-            pcount += (last_bit & aligned_flags3);
-            last_bit = (aligned_flags3 >> 47);
-
-            twins = aligned_flags4 & (aligned_flags4 >> 1);
-            twins &= 0xA9224141224Aull;
-            pcount += _mm_popcnt_u64(twins);
-            pcount += (last_bit & aligned_flags4);
-            last_bit = (aligned_flags4 >> 47);
-
-            twins = aligned_flags5 & (aligned_flags5 >> 1);
-            twins &= 0xA9224141224Aull;
-            pcount += _mm_popcnt_u64(twins);
-            pcount += (last_bit & aligned_flags5);
-            last_bit = (aligned_flags5 >> 47);
-
-            twins = aligned_flags6 & (aligned_flags6 >> 1);
-            twins &= 0xA9224141224Aull;
-            pcount += _mm_popcnt_u64(twins);
-            pcount += (last_bit & aligned_flags6);
-            last_bit = (aligned_flags6 >> 47);
-
-            twins = aligned_flags7 & (aligned_flags7 >> 1);
-            twins &= 0xA9224141224Aull;
-            pcount += _mm_popcnt_u64(twins);
-            pcount += (last_bit & aligned_flags7);
-            last_bit = (aligned_flags7 >> 47);
-
-            twins = aligned_flags8 & (aligned_flags8 >> 1);
-            twins &= 0xA9224141224Aull;
-            pcount += _mm_popcnt_u64(twins);
-            pcount += (last_bit & aligned_flags8);
-            last_bit = (aligned_flags8 >> 47);
-#endif
 
         }
     }
@@ -1631,257 +1454,155 @@ uint64_t count_8_bytes_bmi2(soe_staticdata_t* sdata,
             
         }
     }
-    else if (0) //(nc == 480)
+    else if (nc == 270)
     {
         /*
         
-        twin residues mod 2310:
+        twin residues mod 2310 (separated into groups of 64):
         1 17 19 29 31 41 43 59 61 71 73 101 103 107 109 137 139 149 151 167 169 179 181 191 193 
         197 199 221 223 227 229 239 241 269 271 281 283 311 313 347 349 359 361 377 379 389 391 
-        401 403 419 421 431 433 437 439 461 463 479 481 491 493 521 523 527 529 557 559 569 571 
-        587 589 599 601 611 613 617 619 629 631 641 643 659 661 689 691 701 703 731 733 767 769 
-        797 799 809 811 821 823 827 829 839 841 851 853 857 859 881 883 899 901 941 943 947 949 
-        989 991 1007 1009 1019 1021 1031 1033 1037 1039 1049 1051 1061 1063 1079 1081 1091 1093 
-        1121 1123 1151 1153 1157 1159 1187 1189 1217 1219 1229 1231 1247 1249 1259 1261 1271 1273 
-        1277 1279 1289 1291 1301 1303 1319 1321 1361 1363 1367 1369 1409 1411 1427 1429 1451 1453 
-        1457 1459 1469 1471 1481 1483 1487 1489 1499 1501 1511 1513 1541 1543 1577 1579 1607 1609 
-        1619 1621 1649 1651 1667 1669 1679 1681 1691 1693 1697 1699 1709 1711 1721 1723 1739 1741 
-        1751 1753 1781 1783 1787 1789 1817 1819 1829 1831 1847 1849 1871 1873 1877 1879 1889 1891 
-        1907 1909 1919 1921 1931 1933 1949 1951 1961 1963 1997 1999 2027 2029 2039 2041 2069 2071 
-        2081 2083 2087 2089 2111 2113 2117 2119 2129 2131 2141 2143 2159 2161 2171 2173 2201 2203 
-        2207 2209 2237 2239 2249 2251 2267 2269 2279 2281 2291 2293 2309
+        401 403 419 421 431 433 437 439 461 463 479 481 491 493 521 523 527 
 
-        residue classes mod 2310: 134 of 480 can form twins
-        1 13                                 
-        17 19                                *
-        23                                   
-        29 31                                *
-        37                                   
-        41 43                                *
-        47 53                                
-        59 61                                *
-        67                                   
-        71 73                                *
-        79 83 89 97                          
-        101 103                              *
-        107 109                              *
-        113 127 131                          
-        137 139                              *
-        149 151                              *
-        157 163                              
-        167 169                              *
-        173                                  
-        179 181                              *
-        191 193                              *
-        197 199                              *
-        211                                  
-        221 223                              *
-        227 229                              *
-        233                                  
-        239 241                              *
-        247 251 257 263                      
-        269 271                              *
-        277                                  
-        281 283                              *
-        289 293 299 307                      
-        311 313                              *
-        317 323 331 337                      
-        347 349                              *
-        353                                  
-        359 361                              *
-        367 373                              
-        377 379                              *
-        383                                  
-        389 391                              *
-        397                                  
-        401 403                              *
-        409                                  
-        419 421                              *
-        431 433                              *
-        437 439                              *
-        443 449 457                          
-        461 463                              *
-        467 479 481 487                      
-        491 493                              *
-        499 503 509                          
-        521 523                              *
-        527 529                              *
-        533 541 547 551                      
-        557 559                              *
-        563                                  
-        569 571                              *
-        577                                  
-        587 589                              *
-        593                                  
-        599 601                              *
-        607                                  
-        611 613                              *
-        617 619                              *
-        629 631                              *
-        641 643                              *
-        647 653                              
-        659 661                              *
-        667 673 677 683                      
-        689 691                              *
-        697                                  
-        701 703                              *
-        709 713 719 727                      
-        731 733                              *
-        739 743 751 757 761                  
-        767 769                              *
-        773 779 787 793                      
-        797 799                              *
-        809 811                              *
-        817                                  
-        821 823                              *
-        827 829                              *
-        839 841                              *
-        851 853                              *
-        857 859                              *
-        863 871 877                          
-        881 883                              *
-        887 893                              
-        899 901                              *
-        907 911 919 923 929 937              
-        941 943                              *
-        947 949                              *
-        953 961 967 971 977 983              
-        989 991                              *
-        997 1003                             
-        1007 1009                            *
-        1013                                 
-        1019 1021                            *
-        1027                                 
-        1031 1033                            *
-        1037 1039                            *
-        1049 1051                            *
-        1061 1063                            *
-        1069 1073                            
-        1079 1081                            *
-        1087                                 
-        1091 1093                            *
-        1097 1103 1109 1117                  
-        1121 1123                            *
-        1129 1139 1147                       
-        1151 1153                            *
-        1157 1159                            *
-        1163 1171 1181                       
-        1187 1189                            *
-        1193 1201 1207 1213                  
-        1217 1219                            *
-        1223                                 
-        1229 1231                            *
-        1237 1241                            
-        1247 1249                            *
-        1259 1261                            *
-        1271 1273                            *
-        1277 1279                            *
-        1283                                 
-        1289 1291                            *
-        1297                                 
-        1301 1303                            *
-        1307 1313                            
-        1319 1321                            *
-        1327 1333 1339 1343 1349             
-        1357                                 
-        1361 1363                            *
-        1367 1369                            *
-        1373 1381 1387 1391 1399 1403        
-        1409 1411                            *
-        1417 1423                            
-        1427 1429                            *
-        1433 1439 1447                       
-        1451 1453                            *
-        1457 1459                            *
-        1469 1471                            *
-        1481 1483                            *
-        1487 1489                            *
-        1493                                 
-        1499 1501                            *
-        1511 1513                            *
-        1517 1523 1531 1537                  
-        1541 1543                            *
-        1549 1553 1559 1567 1571             
-        1577 1579                            *
-        1583 1591 1597 1601                  
-        1607 1609                            *
-        1613                                 
-        1619 1621                            *
-        1627 1633 1637 1643                  
-        1649 1651                            *
-        1657 1663                            
-        1667 1669                            *
-        1679 1681                            *
-        1691 1693                            *
-        1697 1699                            *
-        1703                                 
-        1709 1711                            *
-        1717                                 
-        1721 1723                            *
-        1733                                 
-        1739 1741                            *
-        1747                                 
-        1751 1753                            *
-        1759 1763 1769 1777                  
-        1781 1783                            *
-        1787 1789                            *
-        1801 1807 1811                       
-        1817 1819                            *
-        1823                                 
-        1829 1831                            *
-        1843                                 
-        1847 1849                            *
-        1853 1861 1867                       
-        1871 1873                            *
-        1877 1879                            *
-        1889 1891                            *
-        1901                                 
-        1907 1909                            *
-        1913                                 
-        1919 1921                            *
-        1927                                 
-        1931 1933                            *
-        1937 1943                            
-        1949 1951                            *
-        1957                                 
-        1961 1963                            *
-        1973 1979 1987 1993                  
-        1997 1999                            *
-        2003 2011 2017 2021                  
-        2027 2029                            *
-        2033                                 
-        2039 2041                            *
-        2047 2053 2059 2063                  
-        2069 2071                            *
-        2077                                 
-        2081 2083                            *
-        2087 2089                            *
-        2099                                 
-        2111 2113                            *
-        2117 2119                            *
-        2129 2131                            *
-        2137                                 
-        2141 2143                            *
-        2147 2153                            
-        2159 2161                            *
-        2171 2173                            *
-        2179 2183 2197                       
-        2201 2203                            *
-        2207 2209                            *
-        2213 2221 2227 2231                  
-        2237 2239                            *
-        2243                                 
-        2249 2251                            *
-        2257 2263                            
-        2267 2269                            *
-        2273                                 
-        2279 2281                            *
-        2287                                 
-        2291 2293                            *
-        2297 
-        2309                                 *
+        529 557 559 569 571 587 589 599 601 611 613 617 619 629 631 641 643 659 661 689 691 701 
+        703 731 733 767 769 797 799 809 811 821 823 827 829 839 841 851 853 857 859 881 883 899 
+        901 941 943 947 949 989 991 1007 1009 1019 1021 1031 1033 1037 1039 1049 1051 1061 1063 1079 
+
+        1081 1091 1093 1121 1123 1151 1153 1157 1159 1187 1189 1217 1219 1229 1231 1247 1249 1259 
+        1261 1271 1273 1277 1279 1289 1291 1301 1303 1319 1321 1361 1363 1367 1369 1409 1411 1427 
+        1429 1451 1453 1457 1459 1469 1471 1481 1483 1487 1489 1499 1501 1511 1513 1541 1543 1577 
+        1579 1607 1609 1619 1621 1649 1651 1667 1669 1679 
+
+        1681 1691 1693 1697 1699 1709 1711 1721 1723 1739 1741 1751 1753 1781 1783 1787 1789 1817 
+        1819 1829 1831 1847 1849 1871 1873 1877 1879 1889 1891 1907 1909 1919 1921 1931 1933 1949 
+        1951 1961 1963 1997 1999 2027 2029 2039 2041 2069 2071 2081 2083 2087 2089 2111 2113 2117 
+        2119 2129 2131 2141 2143 2159 2161 2171 2173 2201 
+
+        2203 2207 2209 2237 2239 2249 2251 2267 2269 2279 2281 2291 2293 2309
+
         */
         
+        int i;
+        uint32_t last_bit = 0;
+
+        // sort this column of 270x64 bits
+        for (i = 0; i < 8; i++)
+        {
+            // take one byte-column at a time (270x8 bits)
+            uint64_t aligned_flags[34];
+            int j;
+
+            // first we partially order the lines such
+            // that each 64-bit flags contains 8 ordered
+            // bytes for a set of 8 classes.
+            for (j = 0; j < 33; j++)
+            {
+                aligned_flags[j] = interleave_pdep_8x8(
+                    lines[(j * 8) + 0][byte_offset + i],
+                    lines[(j * 8) + 1][byte_offset + i],
+                    lines[(j * 8) + 2][byte_offset + i],
+                    lines[(j * 8) + 3][byte_offset + i],
+                    lines[(j * 8) + 4][byte_offset + i],
+                    lines[(j * 8) + 5][byte_offset + i],
+                    lines[(j * 8) + 6][byte_offset + i],
+                    lines[(j * 8) + 7][byte_offset + i]);
+            }
+
+            aligned_flags[j] = interleave_pdep_8x8(
+                lines[(j * 8) + 0][byte_offset + i],
+                lines[(j * 8) + 1][byte_offset + i],
+                lines[(j * 8) + 2][byte_offset + i],
+                lines[(j * 8) + 3][byte_offset + i],
+                lines[(j * 8) + 4][byte_offset + i],
+                lines[(j * 8) + 5][byte_offset + i],
+                0,
+                0);
+
+            // now, shuffle the bytes within the partially ordered chunks.
+            // every 270 bits there will be a discontinuity between columns
+            // of ordered bits.  Rather than do the somewhat expensive
+            // rotation like in the 30-class case we just group each 270-bit
+            // column into its own set of 5 64-bit variables and then
+            // carry propagate between the sets for each of the 8 columns 
+            // in this byte_offset.  5 * 8 = 40 bytes per set. 
+            uint8_t *unordered_bytes = (uint8_t*)aligned_flags;
+            uint8_t ordered_bytes[320];
+            uint64_t* ordered64 = (uint64_t*)ordered_bytes;
+           
+            for (j = 0; j < 8; j++)
+            {
+                ordered_bytes[(j * 40) + 0 ] = unordered_bytes[j + (0  * 8)];
+                ordered_bytes[(j * 40) + 1 ] = unordered_bytes[j + (1  * 8)];
+                ordered_bytes[(j * 40) + 2 ] = unordered_bytes[j + (2  * 8)];
+                ordered_bytes[(j * 40) + 3 ] = unordered_bytes[j + (3  * 8)];
+                ordered_bytes[(j * 40) + 4 ] = unordered_bytes[j + (4  * 8)];
+                ordered_bytes[(j * 40) + 5 ] = unordered_bytes[j + (5  * 8)];
+                ordered_bytes[(j * 40) + 6 ] = unordered_bytes[j + (6  * 8)];
+                ordered_bytes[(j * 40) + 7 ] = unordered_bytes[j + (7  * 8)];
+                ordered_bytes[(j * 40) + 8 ] = unordered_bytes[j + (8  * 8)];
+                ordered_bytes[(j * 40) + 9 ] = unordered_bytes[j + (9  * 8)];
+                ordered_bytes[(j * 40) + 10] = unordered_bytes[j + (10 * 8)];
+                ordered_bytes[(j * 40) + 11] = unordered_bytes[j + (11 * 8)];
+                ordered_bytes[(j * 40) + 12] = unordered_bytes[j + (12 * 8)];
+                ordered_bytes[(j * 40) + 13] = unordered_bytes[j + (13 * 8)];
+                ordered_bytes[(j * 40) + 14] = unordered_bytes[j + (14 * 8)];
+                ordered_bytes[(j * 40) + 15] = unordered_bytes[j + (15 * 8)];
+                ordered_bytes[(j * 40) + 16] = unordered_bytes[j + (16 * 8)];
+                ordered_bytes[(j * 40) + 17] = unordered_bytes[j + (17 * 8)];
+                ordered_bytes[(j * 40) + 18] = unordered_bytes[j + (18 * 8)];
+                ordered_bytes[(j * 40) + 19] = unordered_bytes[j + (19 * 8)];
+                ordered_bytes[(j * 40) + 20] = unordered_bytes[j + (20 * 8)];
+                ordered_bytes[(j * 40) + 21] = unordered_bytes[j + (21 * 8)];
+                ordered_bytes[(j * 40) + 22] = unordered_bytes[j + (22 * 8)];
+                ordered_bytes[(j * 40) + 23] = unordered_bytes[j + (23 * 8)];
+                ordered_bytes[(j * 40) + 24] = unordered_bytes[j + (24 * 8)];
+                ordered_bytes[(j * 40) + 25] = unordered_bytes[j + (25 * 8)];
+                ordered_bytes[(j * 40) + 26] = unordered_bytes[j + (26 * 8)];
+                ordered_bytes[(j * 40) + 27] = unordered_bytes[j + (27 * 8)];
+                ordered_bytes[(j * 40) + 28] = unordered_bytes[j + (28 * 8)];
+                ordered_bytes[(j * 40) + 29] = unordered_bytes[j + (29 * 8)];
+                ordered_bytes[(j * 40) + 30] = unordered_bytes[j + (30 * 8)];
+                ordered_bytes[(j * 40) + 31] = unordered_bytes[j + (31 * 8)];
+                ordered_bytes[(j * 40) + 32] = unordered_bytes[j + (32 * 8)];
+                ordered_bytes[(j * 40) + 33] = unordered_bytes[j + (33 * 8)];
+            }
+
+            for (j = 0; j < 8; j++)
+            {
+                // count the twins
+                uint64_t twins = ordered64[(j * 5) + 0] & (ordered64[(j * 5) + 0] >> 1);
+                twins &= 0x2AAAAAAAAAAAAAAAull;
+                pcount += _mm_popcnt_u64(twins);
+                pcount += (last_bit & ordered64[(j * 5) + 0]);  // from previous chunk
+                last_bit = (ordered64[(j * 5) + 0] >> 63);      // generate carry
+
+                twins = ordered64[(j * 5) + 1] & (ordered64[(j * 5) + 1] >> 1);
+                twins &= 0x2AAAAAAAAAAAAAAAull;
+                pcount += _mm_popcnt_u64(twins);
+                pcount += (last_bit & ordered64[(j * 5) + 1]);  // from previous chunk
+                last_bit = (ordered64[(j * 5) + 1] >> 63);      // generate carry
+
+                twins = ordered64[(j * 5) + 2] & (ordered64[(j * 5) + 2] >> 1);
+                twins &= 0x2AAAAAAAAAAAAAAAull;
+                pcount += _mm_popcnt_u64(twins);
+                pcount += (last_bit & ordered64[(j * 5) + 2]);  // from previous chunk
+                last_bit = (ordered64[(j * 5) + 2] >> 63);      // generate carry
+
+                twins = ordered64[(j * 5) + 3] & (ordered64[(j * 5) + 3] >> 1);
+                twins &= 0x2AAAAAAAAAAAAAAAull;
+                pcount += _mm_popcnt_u64(twins);
+                pcount += (last_bit & ordered64[(j * 5) + 3]);  // from previous chunk
+                last_bit = (ordered64[(j * 5) + 3] >> 63);      // generate carry
+
+                // 14 bits left in this last word and, similar to the previous words,
+                // we mask off the last bit because it gets carried to the next chunk.
+                twins = ordered64[(j * 5) + 4] & (ordered64[(j * 5) + 4] >> 1);
+                twins &= 0x0AAAull;
+                pcount += _mm_popcnt_u64(twins);
+                pcount += (last_bit & ordered64[(j * 5) + 4]);          // from previous chunk
+                last_bit = ((ordered64[(j * 5) + 4] & 0x2000) >> 13);   // generate carry
+            }
+        }
+
     }
     else
     {

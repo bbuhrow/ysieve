@@ -1033,14 +1033,14 @@ void finalize_sieve(soe_staticdata_t *sdata,
 
 		// PRIMES is already sized appropriately by the wrapper
 		// load in the sieve primes that we need
-        // printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
-        // printf("bucket_start_id = %u\n", sdata->bucket_start_id);
+        //printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
+        //printf("bucket_start_id = %u\n", sdata->bucket_start_id);
         if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
         {
             // count twins from the stored sieve lines
             num_p = count_twins(sdata, thread_data);
 
-            // printf("main sieve found %lu twins, adding twins within sieve primes\n", num_p);
+            //printf("main sieve found %lu twins, adding twins within sieve primes\n", num_p);
             i = 0;
             while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
             {

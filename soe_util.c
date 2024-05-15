@@ -796,8 +796,12 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
         }
     }
 
-    if ((sdata->is_main_sieve == 1) && (sdata->analysis == 2))
+
+    if ( (sdata->is_main_sieve == 1) && (sdata->analysis == 2) && 
+        ((sdata->numclasses == 48) || (sdata->numclasses == 480)))  // && (sdata->only_count))
     {
+        // if we are asked to count twin primes, we can reduce
+        // the effort by only sieving allowed classes.
         int i, k;
         k = 0;
         int prev = 0;

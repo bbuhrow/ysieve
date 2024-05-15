@@ -936,13 +936,52 @@ void compute_roots_work_fcn(void *vptr)
         printf("starting root computation over %u to %u\n", t->startid, t->stopid);
     }
 
+    uint32_t numclasses = sdata->numclasses;
+    
+    // this function requires the full residue class table.
+    // (if we're using twins residues we need to re-find them.)
     res_table = malloc(sdata->prodN * sizeof(int));
     memset(res_table, -1, sizeof(int));
-    for (i = 0; i < sdata->numclasses; i++)
-        res_table[sdata->rclass[i]] = i;
+    if (sdata->numclasses == 30)
+    {
+        uint32_t rclass[48];
+        numclasses = 48;
+        int k = 0;
+        for (i = 1; i < pn; i++)
+        {
+            if (gcd_1(i, (uint64_t)pn) == 1)
+            {
+                rclass[k] = (uint32_t)i;
+                k++;
+            }
+        }
+        for (i = 0; i < numclasses; i++)
+            res_table[rclass[i]] = i;
+    }
+    else if (sdata->numclasses == 270)
+    {
+        uint32_t rclass[480];
+        numclasses = 480;
+        int k = 0;
+        for (i = 1; i < pn; i++)
+        {
+            if (gcd_1(i, (uint64_t)pn) == 1)
+            {
+                rclass[k] = (uint32_t)i;
+                k++;
+            }
+        }
+        for (i = 0; i < numclasses; i++)
+            res_table[rclass[i]] = i;
+    }
+    else
+    {
+        for (i = 0; i < numclasses; i++)
+            res_table[sdata->rclass[i]] = i;
+    }   
 
-    last_root = (uint32_t *)calloc(sdata->numclasses, sizeof(uint32_t));
-    last_p = (uint32_t *)calloc(sdata->numclasses, sizeof(uint32_t));
+    last_root = (uint32_t *)calloc(numclasses, sizeof(uint32_t));
+    last_p = (uint32_t *)calloc(numclasses, sizeof(uint32_t));
 
     if (t->sdata.prodN == 6)
     {

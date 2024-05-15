@@ -81,11 +81,63 @@ void compute_primes_work_fcn(void *vptr)
     }
 
 #if defined(USE_BMI2) || defined(USE_AVX512F)
-    if ((sdata->has_bmi2) && (sdata->numclasses < 96) && (!(sdata->analysis > 1)))
+    if ((sdata->has_bmi2) && (sdata->numclasses <= 48)) // && (!(sdata->analysis > 1)))
     {
         for (i = t->startid; i < t->stopid; i += 8)
         {
             t->linecount = compute_8_bytes_bmi2(sdata, t->linecount, t->ddata.primes, i);
+
+            // if searching for prime constellations, then we need to look at the last 
+            // flags of this block of 8 bytes and the first flags of the next one.
+            // we do this by loading the trailing bits of this block into a carry
+            // register.  The rest is handled by the block analysis function.
+            if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
+            {
+                uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
+                uint8_t* firstline = sdata->lines[0];
+
+                if ((i + 8) < t->stopid)
+                {
+                    uint8_t lastflag = lastline[i + 7] & 0x80;
+                    uint8_t firstflag = firstline[i + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        uint64_t lowlimit = sdata->lowlimit + i * 8 * sdata->prodN;
+                        uint64_t prime = lowlimit + 63 * sdata->prodN + sdata->rclass[sdata->numclasses - 1];
+
+                        lowlimit = sdata->lowlimit + (i + 8) * 8 * sdata->prodN;
+                        uint64_t p2 = lowlimit + 0 * sdata->prodN + sdata->rclass[0];
+
+                        if ((prime >= sdata->orig_llimit) && (prime <= sdata->orig_hlimit))
+                        {
+                            t->ddata.primes[sdata->GLOBAL_OFFSET + t->linecount++] = prime;
+                        }
+                    }
+                }
+                else if ((i + 8) < sdata->numlinebytes)
+                {
+                    // this thread is done but if there is more data after
+                    // this thread's chunk then check between thread boundaries.
+                    uint8_t lastflag = lastline[i + 7] & 0x80;
+                    uint8_t firstflag = firstline[i + 8] & 0x1;
+
+                    if (lastflag && firstflag)
+                    {
+                        uint64_t lowlimit = sdata->lowlimit + i * 8 * sdata->prodN;
+                        uint64_t prime = lowlimit + 63 * sdata->prodN + sdata->rclass[sdata->numclasses - 1];
+
+                        lowlimit = sdata->lowlimit + (i + 8) * 8 * sdata->prodN;
+                        uint64_t p2 = lowlimit + 0 * sdata->prodN + sdata->rclass[0];
+
+                        if ((prime >= sdata->orig_llimit) && (prime <= sdata->orig_hlimit))
+                        {
+                            //printf("found twin %lu between threads\n", prime);
+                            t->ddata.primes[sdata->GLOBAL_OFFSET + t->linecount++] = prime;
+                        }
+                    }
+                }
+            }
         }
     }
     else
@@ -100,10 +152,6 @@ void compute_primes_work_fcn(void *vptr)
             // flags of this block of 8 bytes and the first flags of the next one.
             // we do this by loading the trailing bits of this block into a carry
             // register.  The rest is handled by the block analysis function.
-            // For the first block in a multi-threaded run, we should also
-            // be receiving carry data from the previous thread in order to
-            // maintain continuity across threads.
-
             if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
             {
                 uint8_t* lastline = sdata->lines[sdata->numclasses - 1];
@@ -407,6 +455,9 @@ uint32_t compute_8_bytes(soe_staticdata_t *sdata,
         uint64_t *line64 = (uint64_t *)lines[current_line];
         uint64_t flags64 = line64[byte_offset / 8];
 
+        //if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
+        //    printf("sorting bits in twin residue %u\n", sdata->rclass[current_line]);
+
         while (flags64 > 0)
         {
             uint64_t pos = _trail_zcnt64(flags64);
@@ -420,6 +471,8 @@ uint32_t compute_8_bytes(soe_staticdata_t *sdata,
             flags64 ^= (1ULL << pos);
         }
     }
+    //if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
+    //    exit(1);
 
     for (i = 0; i < 64; i++)
     {
@@ -537,7 +590,7 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
         }
     }
 
-    // AVX2 version, new instructions help quite a bit:
+    // BMI2 version, new instructions help quite a bit:
     // use _pdep_u64 to align/interleave bits from multiple bytes, 
     // _blsr_u64 to clear the last set bit, and depending on the 
     // number of residue classes, AVX2 vector load/store operations.
@@ -554,6 +607,7 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
     if (nc == 2)
     {
         int i;
+        uint32_t last_bit = 0;
         uint32_t *lines32a = (uint32_t *)lines[0];
         uint32_t *lines32b = (uint32_t *)lines[1];
 
@@ -567,23 +621,53 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
                 lines32a[byte_offset/4+i],
                 lines32b[byte_offset/4+i]);
 
-            // then compute primes in order for flags that are set.
-            while (aligned_flags > 0)
+            if ((sdata->analysis == 2) && (sdata->is_main_sieve))
             {
-                uint64_t pos = _trail_zcnt64(aligned_flags);
-                uint64_t prime = lowlimit + (pos / 2) * 6 + sdata->rclass[pos % 2];
+                // alternate bits encode potential primes
+                // in residue classes 1 and 5.  So twins can 
+                // only exist with flags in class 5 followed by 1.
+                uint64_t twins = aligned_flags & (aligned_flags >> 1);
 
-                primes[GLOBAL_OFFSET + pcount++] = prime;
-                aligned_flags = _reset_lsb64(aligned_flags);
+                twins &= 0xaaaaaaaaaaaaaaaaULL;
+
+                //pcount += _mm_popcnt_u64(twins);
+                if (last_bit & aligned_flags)
+                {
+                    uint64_t prime = lowlimit - 1;
+                    primes[GLOBAL_OFFSET + pcount++] = prime;
+                }
+                while (twins > 0)
+                {
+                    uint64_t pos = _trail_zcnt64(twins);
+                    uint64_t prime = lowlimit + (pos / 2) * 6 + sdata->rclass[pos % 2];
+
+                    primes[GLOBAL_OFFSET + pcount++] = prime;
+                    twins = _reset_lsb64(twins);
+                }
+                lowlimit += 32 * sdata->prodN;
+                last_bit = (aligned_flags >> 63);
             }
-            lowlimit += 32 * sdata->prodN;
+            else
+            {
+                // then compute primes in order for flags that are set.
+                while (aligned_flags > 0)
+                {
+                    uint64_t pos = _trail_zcnt64(aligned_flags);
+                    uint64_t prime = lowlimit + (pos / 2) * 6 + sdata->rclass[pos % 2];
+
+                    primes[GLOBAL_OFFSET + pcount++] = prime;
+                    aligned_flags = _reset_lsb64(aligned_flags);
+                }
+                lowlimit += 32 * sdata->prodN;
+            }
         }
 
     }
     else if (nc == 8)
     {
         int i;
-     
+        uint32_t last_bit = 0;
+
         // align the current bytes in next 8 residue classes
         lowlimit += byte_offset * 8 * sdata->prodN;
         for (i = 0; i < 8; i++)
@@ -599,18 +683,296 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
                 lines[6][byte_offset+i],
                 lines[7][byte_offset+i]);
 
-            // then compute primes in order for flags that are set.
-            while (aligned_flags > 0)
+            if ((sdata->analysis == 2) && (sdata->is_main_sieve))
             {
-                uint64_t pos = _trail_zcnt64(aligned_flags);
-                uint64_t prime = lowlimit + (pos / 8) * 30 + sdata->rclass[pos % 8];
+                uint64_t twins = aligned_flags & (aligned_flags >> 1);
+                twins &= 0x9494949494949494ULL;
 
-                primes[GLOBAL_OFFSET + pcount++] = prime;
-                aligned_flags = _reset_lsb64(aligned_flags);
+                //pcount += _mm_popcnt_u64(twins);
+                if (last_bit & aligned_flags)
+                {
+                    uint64_t prime = lowlimit - 1;
+                    primes[GLOBAL_OFFSET + pcount++] = prime;
+                }
+                while (twins > 0)
+                {
+                    uint64_t pos = _trail_zcnt64(twins);
+                    uint64_t prime = lowlimit + (pos / 8) * 30 + sdata->rclass[pos % 8];
+
+                    primes[GLOBAL_OFFSET + pcount++] = prime;
+                    twins = _reset_lsb64(twins);
+                }
+                lowlimit += 8 * sdata->prodN;
+                last_bit = (aligned_flags >> 63);
             }
-            lowlimit += 8 * sdata->prodN;
+            else
+            {
+                // then compute primes in order for flags that are set.
+                while (aligned_flags > 0)
+                {
+                    uint64_t pos = _trail_zcnt64(aligned_flags);
+                    uint64_t prime = lowlimit + (pos / 8) * 30 + sdata->rclass[pos % 8];
+
+                    primes[GLOBAL_OFFSET + pcount++] = prime;
+                    aligned_flags = _reset_lsb64(aligned_flags);
+                }
+                lowlimit += 8 * sdata->prodN;
+            }
         }
 
+    }
+    else if (nc == 30)
+    {
+        // twins residues for mod 210
+        int i;
+        uint32_t last_bit = 0;
+
+        lowlimit += byte_offset * 8 * sdata->prodN;
+        for (i = 0; i < 8; i++)
+        {
+            uint64_t aligned_flags1;
+            uint64_t aligned_flags2;
+            uint64_t aligned_flags3;
+            uint64_t aligned_flags4;
+
+            // first we partially order the lines such
+            // that each 64-bit flags contains 8 ordered
+            // bytes for a set of 8 classes.
+            aligned_flags1 = interleave_avx2_bmi2_pdep(
+                lines[0][byte_offset + i],
+                lines[1][byte_offset + i],
+                lines[2][byte_offset + i],
+                lines[3][byte_offset + i],
+                lines[4][byte_offset + i],
+                lines[5][byte_offset + i],
+                lines[6][byte_offset + i],
+                lines[7][byte_offset + i]);
+
+            aligned_flags2 = interleave_avx2_bmi2_pdep(
+                lines[8 + 0][byte_offset + i],
+                lines[8 + 1][byte_offset + i],
+                lines[8 + 2][byte_offset + i],
+                lines[8 + 3][byte_offset + i],
+                lines[8 + 4][byte_offset + i],
+                lines[8 + 5][byte_offset + i],
+                lines[8 + 6][byte_offset + i],
+                lines[8 + 7][byte_offset + i]);
+
+            aligned_flags3 = interleave_avx2_bmi2_pdep(
+                lines[16 + 0][byte_offset + i],
+                lines[16 + 1][byte_offset + i],
+                lines[16 + 2][byte_offset + i],
+                lines[16 + 3][byte_offset + i],
+                lines[16 + 4][byte_offset + i],
+                lines[16 + 5][byte_offset + i],
+                lines[16 + 6][byte_offset + i],
+                lines[16 + 7][byte_offset + i]);
+
+            aligned_flags4 = interleave_avx2_bmi2_pdep(
+                lines[24 + 0][byte_offset + i],
+                lines[24 + 1][byte_offset + i],
+                lines[24 + 2][byte_offset + i],
+                lines[24 + 3][byte_offset + i],
+                lines[24 + 4][byte_offset + i],
+                lines[24 + 5][byte_offset + i],
+                0,
+                0);
+
+
+            // aligned_flags1 contains: b0(c0-7), b1(c0-7), b2(c0-7), ... b7(c0-7)
+            // aligned_flags2 contains: b0(c8-15), b1(c8-15), b2(c8-15), ... b7(c8-15)
+            // aligned_flags3 contains: b0(c16-23), b1(c16-23), b2(c16-23), ... b7(c16-23)
+            // aligned_flags4 contains: b0(c24-29), b1(c24-29), b2(c24-29), ... b7(c24-29)
+
+            // now, shuffle the bytes within the partially ordered chunks.
+            uint8_t unordered_bytes[48];
+            uint8_t ordered_bytes[64];
+            uint64_t* unordered64 = (uint64_t*)unordered_bytes;
+            uint64_t* ordered64 = (uint64_t*)ordered_bytes;
+            uint32_t* ordered32 = (uint32_t*)ordered_bytes;
+            unordered64[0] = aligned_flags1;
+            unordered64[1] = aligned_flags2;
+            unordered64[2] = aligned_flags3;
+            unordered64[3] = aligned_flags4;
+
+            ordered_bytes[0] = unordered_bytes[0];
+            ordered_bytes[1] = unordered_bytes[8];
+            ordered_bytes[2] = unordered_bytes[16];
+            ordered_bytes[3] = unordered_bytes[24];
+            ordered_bytes[4] = unordered_bytes[1];
+            ordered_bytes[5] = unordered_bytes[9];
+            ordered_bytes[6] = unordered_bytes[17];
+            ordered_bytes[7] = unordered_bytes[25];
+
+            ordered_bytes[8] = unordered_bytes[2];
+            ordered_bytes[9] = unordered_bytes[10];
+            ordered_bytes[10] = unordered_bytes[18];
+            ordered_bytes[11] = unordered_bytes[26];
+            ordered_bytes[12] = unordered_bytes[3];
+            ordered_bytes[13] = unordered_bytes[11];
+            ordered_bytes[14] = unordered_bytes[19];
+            ordered_bytes[15] = unordered_bytes[27];
+
+            ordered_bytes[16] = unordered_bytes[4];
+            ordered_bytes[17] = unordered_bytes[12];
+            ordered_bytes[18] = unordered_bytes[20];
+            ordered_bytes[19] = unordered_bytes[28];
+            ordered_bytes[20] = unordered_bytes[5];
+            ordered_bytes[21] = unordered_bytes[13];
+            ordered_bytes[22] = unordered_bytes[21];
+            ordered_bytes[23] = unordered_bytes[29];
+
+            ordered_bytes[24] = unordered_bytes[6];
+            ordered_bytes[25] = unordered_bytes[14];
+            ordered_bytes[26] = unordered_bytes[22];
+            ordered_bytes[27] = unordered_bytes[30];
+            ordered_bytes[28] = unordered_bytes[7];
+            ordered_bytes[29] = unordered_bytes[15];
+            ordered_bytes[30] = unordered_bytes[23];
+            ordered_bytes[31] = unordered_bytes[31];
+
+            // rotate 2 bits for continuity between
+            // the two 30-bit sections.
+            ordered32[0] |= ((ordered32[1] & 0x3) << 30);
+            ordered32[2] |= ((ordered32[3] & 0x3) << 30);
+            ordered32[4] |= ((ordered32[5] & 0x3) << 30);
+            ordered32[6] |= ((ordered32[7] & 0x3) << 30);
+            ordered32[1] >>= 2;
+            ordered32[3] >>= 2;
+            ordered32[5] >>= 2;
+            ordered32[7] >>= 2;
+
+            aligned_flags1 = ordered64[0];
+            aligned_flags2 = ordered64[1];
+            aligned_flags3 = ordered64[2];
+            aligned_flags4 = ordered64[3];
+
+            // twin residues mod 210:
+            // 1 11 13 17 19 29 31 41 43 59 61 71 73 101 103 107 109 137 139 149 151 167 169 179 181 191 193 197 199 209
+            // binary mask: 0101 0101 0101 0101 0101 0101 0101 01|01 0101 0101 0101 0101 0101 0101 0100
+            // hex mask: AAAAAAAAAAAAAA20
+
+            // then compute twins in order for flags that are set.
+            // word 1
+            uint64_t twins = aligned_flags1 & (aligned_flags1 >> 1);
+            twins &= 0x02AAAAAAAAAAAAAAull;
+            if (last_bit & aligned_flags1)
+            {
+                uint64_t prime = lowlimit - 1;
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = twins & 0xfffffffffffffffeull;
+            }
+            while ((twins & 0x3fffffffull) > 0)
+            {
+                uint64_t pos = _trail_zcnt64((twins & 0x3fffffffull));
+                uint64_t prime = lowlimit + sdata->rclass[pos];
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = _reset_lsb64(twins);
+            }
+            lowlimit += sdata->prodN;
+            while ((twins >> 30) > 0)
+            {
+                uint64_t pos = _trail_zcnt64((twins >> 30));
+                uint64_t prime = lowlimit + sdata->rclass[pos];
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = _reset_lsb64(twins);
+            }
+            lowlimit += sdata->prodN;
+            last_bit = (aligned_flags1 >> 59);      // generate carry
+
+            // 2
+            twins = aligned_flags2 & (aligned_flags2 >> 1);
+            twins &= 0x02AAAAAAAAAAAAAAull;
+            if (last_bit & aligned_flags2)
+            {
+                uint64_t prime = lowlimit - 1;
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = twins & 0xfffffffffffffffeull;
+            }
+            while ((twins & 0x3fffffffull) > 0)
+            {
+                uint64_t pos = _trail_zcnt64((twins & 0x3fffffffull));
+                uint64_t prime = lowlimit + sdata->rclass[pos];
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = _reset_lsb64(twins);
+            }
+            lowlimit += sdata->prodN;
+            while ((twins >> 30) > 0)
+            {
+                uint64_t pos = _trail_zcnt64((twins >> 30));
+                uint64_t prime = lowlimit + sdata->rclass[pos];
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = _reset_lsb64(twins);
+            }
+            lowlimit += sdata->prodN;
+            last_bit = (aligned_flags2 >> 59);      // generate carry
+
+            // 3
+            twins = aligned_flags3 & (aligned_flags3 >> 1);
+            twins &= 0x02AAAAAAAAAAAAAAull;
+            if (last_bit & aligned_flags3)
+            {
+                uint64_t prime = lowlimit - 1;
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = twins & 0xfffffffffffffffeull;
+            }
+            while ((twins & 0x3fffffffull) > 0)
+            {
+                uint64_t pos = _trail_zcnt64((twins & 0x3fffffffull));
+                uint64_t prime = lowlimit + sdata->rclass[pos];
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = _reset_lsb64(twins);
+            }
+            lowlimit += sdata->prodN;
+            while ((twins >> 30) > 0)
+            {
+                uint64_t pos = _trail_zcnt64((twins >> 30));
+                uint64_t prime = lowlimit + sdata->rclass[pos];
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = _reset_lsb64(twins);
+            }
+            lowlimit += sdata->prodN;
+            last_bit = (aligned_flags3 >> 59);      // generate carry
+
+            // 4
+            twins = aligned_flags4 & (aligned_flags4 >> 1);
+            twins &= 0x02AAAAAAAAAAAAAAull;
+            if (last_bit & aligned_flags4)
+            {
+                uint64_t prime = lowlimit - 1;
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = twins & 0xfffffffffffffffeull;
+            }
+            while ((twins & 0x3fffffffull) > 0)
+            {
+                uint64_t pos = _trail_zcnt64((twins & 0x3fffffffull));
+                uint64_t prime = lowlimit + sdata->rclass[pos];
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = _reset_lsb64(twins);
+            }
+            lowlimit += sdata->prodN;
+            while ((twins >> 30) > 0)
+            {
+                uint64_t pos = _trail_zcnt64((twins >> 30));
+                uint64_t prime = lowlimit + sdata->rclass[pos];
+
+                primes[GLOBAL_OFFSET + pcount++] = prime;
+                twins = _reset_lsb64(twins);
+            }
+            lowlimit += sdata->prodN;
+            last_bit = (aligned_flags4 >> 59);      // generate carry
+        }
     }
     else if (nc == 48)
     {
@@ -812,6 +1174,135 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
             }
             lowlimit += 8 * sdata->prodN;
         }
+    }
+    else if (nc == 270)
+    {
+        // twins residues for mod 2310
+
+        /*
+
+        twin residues mod 2310 (separated into groups of 64):
+        1 17 19 29 31 41 43 59 61 71 73 101 103 107 109 137 139 149 151 167 169 179 181 191 193
+        197 199 221 223 227 229 239 241 269 271 281 283 311 313 347 349 359 361 377 379 389 391
+        401 403 419 421 431 433 437 439 461 463 479 481 491 493 521 523 527
+
+        529 557 559 569 571 587 589 599 601 611 613 617 619 629 631 641 643 659 661 689 691 701
+        703 731 733 767 769 797 799 809 811 821 823 827 829 839 841 851 853 857 859 881 883 899
+        901 941 943 947 949 989 991 1007 1009 1019 1021 1031 1033 1037 1039 1049 1051 1061 1063 1079
+
+        1081 1091 1093 1121 1123 1151 1153 1157 1159 1187 1189 1217 1219 1229 1231 1247 1249 1259
+        1261 1271 1273 1277 1279 1289 1291 1301 1303 1319 1321 1361 1363 1367 1369 1409 1411 1427
+        1429 1451 1453 1457 1459 1469 1471 1481 1483 1487 1489 1499 1501 1511 1513 1541 1543 1577
+        1579 1607 1609 1619 1621 1649 1651 1667 1669 1679
+
+        1681 1691 1693 1697 1699 1709 1711 1721 1723 1739 1741 1751 1753 1781 1783 1787 1789 1817
+        1819 1829 1831 1847 1849 1871 1873 1877 1879 1889 1891 1907 1909 1919 1921 1931 1933 1949
+        1951 1961 1963 1997 1999 2027 2029 2039 2041 2069 2071 2081 2083 2087 2089 2111 2113 2117
+        2119 2129 2131 2141 2143 2159 2161 2171 2173 2201
+
+        2203 2207 2209 2237 2239 2249 2251 2267 2269 2279 2281 2291 2293 2309
+
+        */
+
+        int i;
+        uint32_t last_bit = 0;
+
+        // sort this column of 270x64 bits
+        for (i = 0; i < 8; i++)
+        {
+            // take one byte-column at a time (270x8 bits)
+            uint64_t aligned_flags[34];
+            int j;
+
+            // first we partially order the lines such
+            // that each 64-bit flags contains 8 ordered
+            // bytes for a set of 8 classes.
+            for (j = 0; j < 33; j++)
+            {
+                aligned_flags[j] = interleave_pdep_8x8(
+                    lines[(j * 8) + 0][byte_offset + i],
+                    lines[(j * 8) + 1][byte_offset + i],
+                    lines[(j * 8) + 2][byte_offset + i],
+                    lines[(j * 8) + 3][byte_offset + i],
+                    lines[(j * 8) + 4][byte_offset + i],
+                    lines[(j * 8) + 5][byte_offset + i],
+                    lines[(j * 8) + 6][byte_offset + i],
+                    lines[(j * 8) + 7][byte_offset + i]);
+            }
+
+            aligned_flags[j] = interleave_pdep_8x8(
+                lines[(j * 8) + 0][byte_offset + i],
+                lines[(j * 8) + 1][byte_offset + i],
+                lines[(j * 8) + 2][byte_offset + i],
+                lines[(j * 8) + 3][byte_offset + i],
+                lines[(j * 8) + 4][byte_offset + i],
+                lines[(j * 8) + 5][byte_offset + i],
+                0,
+                0);
+
+            // now, shuffle the bytes within the partially ordered chunks.
+            // every 270 bits there will be a discontinuity between columns
+            // of ordered bits.  Rather than do the somewhat expensive
+            // rotation like in the 30-class case we just group each 270-bit
+            // column into its own set of 5 64-bit variables and then
+            // carry propagate between the sets for each of the 8 columns 
+            // in this byte_offset.  5 * 8 = 40 bytes per set. 
+            uint8_t* unordered_bytes = (uint8_t*)aligned_flags;
+            uint8_t ordered_bytes[320];
+            uint64_t* ordered64 = (uint64_t*)ordered_bytes;
+
+            for (j = 0; j < 8; j++)
+            {
+                ordered_bytes[(j * 40) + 0] = unordered_bytes[j + (0 * 8)];
+                ordered_bytes[(j * 40) + 1] = unordered_bytes[j + (1 * 8)];
+                ordered_bytes[(j * 40) + 2] = unordered_bytes[j + (2 * 8)];
+                ordered_bytes[(j * 40) + 3] = unordered_bytes[j + (3 * 8)];
+                ordered_bytes[(j * 40) + 4] = unordered_bytes[j + (4 * 8)];
+                ordered_bytes[(j * 40) + 5] = unordered_bytes[j + (5 * 8)];
+                ordered_bytes[(j * 40) + 6] = unordered_bytes[j + (6 * 8)];
+                ordered_bytes[(j * 40) + 7] = unordered_bytes[j + (7 * 8)];
+                ordered_bytes[(j * 40) + 8] = unordered_bytes[j + (8 * 8)];
+                ordered_bytes[(j * 40) + 9] = unordered_bytes[j + (9 * 8)];
+                ordered_bytes[(j * 40) + 10] = unordered_bytes[j + (10 * 8)];
+                ordered_bytes[(j * 40) + 11] = unordered_bytes[j + (11 * 8)];
+                ordered_bytes[(j * 40) + 12] = unordered_bytes[j + (12 * 8)];
+                ordered_bytes[(j * 40) + 13] = unordered_bytes[j + (13 * 8)];
+                ordered_bytes[(j * 40) + 14] = unordered_bytes[j + (14 * 8)];
+                ordered_bytes[(j * 40) + 15] = unordered_bytes[j + (15 * 8)];
+                ordered_bytes[(j * 40) + 16] = unordered_bytes[j + (16 * 8)];
+                ordered_bytes[(j * 40) + 17] = unordered_bytes[j + (17 * 8)];
+                ordered_bytes[(j * 40) + 18] = unordered_bytes[j + (18 * 8)];
+                ordered_bytes[(j * 40) + 19] = unordered_bytes[j + (19 * 8)];
+                ordered_bytes[(j * 40) + 20] = unordered_bytes[j + (20 * 8)];
+                ordered_bytes[(j * 40) + 21] = unordered_bytes[j + (21 * 8)];
+                ordered_bytes[(j * 40) + 22] = unordered_bytes[j + (22 * 8)];
+                ordered_bytes[(j * 40) + 23] = unordered_bytes[j + (23 * 8)];
+                ordered_bytes[(j * 40) + 24] = unordered_bytes[j + (24 * 8)];
+                ordered_bytes[(j * 40) + 25] = unordered_bytes[j + (25 * 8)];
+                ordered_bytes[(j * 40) + 26] = unordered_bytes[j + (26 * 8)];
+                ordered_bytes[(j * 40) + 27] = unordered_bytes[j + (27 * 8)];
+                ordered_bytes[(j * 40) + 28] = unordered_bytes[j + (28 * 8)];
+                ordered_bytes[(j * 40) + 29] = unordered_bytes[j + (29 * 8)];
+                ordered_bytes[(j * 40) + 30] = unordered_bytes[j + (30 * 8)];
+                ordered_bytes[(j * 40) + 31] = unordered_bytes[j + (31 * 8)];
+                ordered_bytes[(j * 40) + 32] = unordered_bytes[j + (32 * 8)];
+                ordered_bytes[(j * 40) + 33] = unordered_bytes[j + (33 * 8)];
+            }
+
+            for (j = 0; j < 8; j++)
+            {
+                // then compute twins in order for flags that are set.
+                while (ordered64[(j * 5) + 0] > 0)
+                {
+                    uint64_t pos = _trail_zcnt64(ordered64[(j * 5) + 0]);
+                    uint64_t prime = lowlimit + (pos / 48) * 210 + sdata->rclass[pos % 48];
+
+                    primes[GLOBAL_OFFSET + pcount++] = prime;
+                    ordered64[(j * 5) + 0] = _reset_lsb64(ordered64[(j * 5) + 0]);
+                }
+            }
+        }
+
     }
     else
     {
