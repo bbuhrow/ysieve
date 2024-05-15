@@ -83,11 +83,55 @@ static __inline __m256i vec_to_monty(__m256i x, __m256i r2, __m256i pinv, __m256
 
 #endif
 
-void get_offsets(thread_soedata_t *thread_data)
+void bucket_sort(thread_soedata_t* thread_data)
+{
+    soe_dynamicdata_t* ddata = &thread_data->ddata;
+    soe_staticdata_t* sdata = &thread_data->sdata;
+
+    uint64_t startprime = sdata->startprime, prodN = sdata->prodN;
+    uint32_t i, prime, root, bnum, cnum;
+    int FLAGSIZE = sdata->FLAGSIZE;
+    int FLAGBITS = sdata->FLAGBITS;
+
+    if (ddata->bucket_depth > 0)
+    {
+        uint64_t*** bptr;
+
+        uint32_t** nptr;
+        uint32_t linesize = FLAGSIZE * sdata->blocks;
+
+        nptr = ddata->bucket_hits;
+        bptr = ddata->sieve_buckets;
+
+        for (sdata->bucket_start_id; i < sdata->bitmap_start_id; i++)
+        {
+            prime = sdata->sieve_p[i];
+
+            // starting block and class
+            uint64_t p2 = prime * prime;
+            uint64_t offset = p2 - sdata->lowlimit;
+
+            if (offset < linesize)
+            {
+                bnum = (offset >> FLAGBITS);
+                cnum = offset % prodN;
+                bptr[bnum][cnum][nptr[bnum][cnum]] = 
+                    ((uint64_t)prime << 32) | (uint64_t)root;
+                nptr[bnum][cnum]++;
+            }
+        }
+    }
+
+    return;
+}
+
+
+
+void get_offsets(thread_soedata_t* thread_data)
 {
     //extract stuff from the thread data structure
-    soe_dynamicdata_t *ddata = &thread_data->ddata;
-    soe_staticdata_t *sdata = &thread_data->sdata;
+    soe_dynamicdata_t* ddata = &thread_data->ddata;
+    soe_staticdata_t* sdata = &thread_data->sdata;
 
     uint64_t i, startprime = sdata->startprime, prodN = sdata->prodN, block = 0;
     uint32_t prime, root, bnum;
@@ -265,7 +309,7 @@ void get_offsets(thread_soedata_t *thread_data)
                 vr = vec_redc(even, odd, vpinv, vp);
 
                 // take out of monty rep
-                vr = vec_redc(CLEAR_HIGH_VEC(vr), 
+                vr = vec_redc(CLEAR_HIGH_VEC(vr),
                     CLEAR_HIGH_VEC(_mm256_shuffle_epi32(vr, 0xB1)), vpinv, vp);
 
                 //t1 = _mm256_set1_epi32(linesize);
@@ -728,5 +772,5 @@ void get_offsets(thread_soedata_t *thread_data)
 
     }
 
-	return;
+    return;
 }

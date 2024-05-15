@@ -28,6 +28,7 @@ SOFTWARE.
 #include <immintrin.h>
 #include <math.h>
 #include <string.h>
+#include "threadpool.h"
 
 #define BUCKET_UPDATE2(i,bits) \
     bnum = ((uint32_t)bptr[j + i] >> (bits)); \
@@ -3353,4 +3354,200 @@ void sieve_line_avx2_512k(thread_soedata_t* thread_data)
     return;
 }
 #endif
+
+
+void get_line_offsets(thread_soedata_t* thread_data)
+{
+	//extract stuff from the thread data structure
+	soe_dynamicdata_t* ddata = &thread_data->ddata;
+	soe_staticdata_t* sdata = &thread_data->sdata;
+
+	uint64_t startprime = sdata->startprime, prodN = sdata->prodN;
+	uint32_t i, prime, root, bnum;
+	int s;
+	int FLAGSIZE = sdata->FLAGSIZE;
+	int FLAGBITS = sdata->FLAGBITS;
+
+	// assumes lowlimit = 0.
+	for (i = startprime; i < sdata->bucket_start_id; i++)
+	{
+		prime = sdata->sieve_p[i];
+
+		uint64_t p2 = (uint64_t)prime * (uint64_t)prime;
+
+		// given the class of this prime square and the class
+		// of the prime itself we can use a lookup table for
+		// how many steps to the desired starting class.
+		// division by a small fixed constant should be compiled
+		// to something fairly fast.
+		uint32_t class_loc = p2 % prodN;
+		uint32_t class_prime = prime % prodN;
+
+		while ((p2 % prodN) != sdata->rclass[thread_data->current_line])
+			p2 += prime;
+
+
+	}
+
+
+	return;
+}
+
+void sieve_lines(thread_soedata_t* thread_data)
+{
+	// extract stuff from the thread data structure
+	soe_dynamicdata_t* ddata = &thread_data->ddata;
+	soe_staticdata_t* sdata = &thread_data->sdata;
+	int FLAGSIZE = sdata->FLAGSIZE;
+	int FLAGSIZEm1 = sdata->FLAGSIZEm1;
+	int FLAGBITS = sdata->FLAGBITS;
+	int SOEBLOCKSIZE = sdata->SOEBLOCKSIZE;
+	uint8_t* masks = sdata->masks;
+	uint8_t* nmasks = sdata->nmasks;
+
+	// stuff for bucket sieving
+	uint64_t* bptr;
+	uint64_t** buckets;
+
+	uint32_t* nptr;
+	uint32_t linesize = FLAGSIZE * sdata->blocks, bnum;
+
+	uint32_t i, j, k;
+	uint32_t prime;
+	int stopid;
+
+	for (i = thread_data->startid; i < thread_data->stopid; i++)
+	{
+		bucket_sort(thread_data);
+
+		for (j = 0; j < sdata->numclasses; j++)
+		{
+			uint8_t* line = sdata->lines[j];
+			thread_data->current_line = j;
+
+			// for the current line, find the starting offset of
+			// all small and medium primes in this thread's blocks.
+			get_line_offsets(thread_data);
+
+			// set all flags for this block, which also puts 
+			// it into cache for the sieving to follow.  
+			memset(line, 255, SOEBLOCKSIZE);
+
+			// smallest primes use special methods
+			pre_sieve_ptr(ddata, sdata, line);
+
+			// start where presieving left off, which is different for various cpus.
+			k = sdata->presieve_max_id;
+		}
+	}
+
+	return;
+}
+
+void sieve_lines_dispatch(void* vptr)
+{
+	tpool_t* tdata = (tpool_t*)vptr;
+	soe_userdata_t* t = (soe_userdata_t*)tdata->user_data;
+	soe_staticdata_t* sdata = t->sdata;
+
+	// launch one range of computation for each thread.  don't really
+	// need a threadpool for this, but the infrastructure is there...
+	if (sdata->sync_count < sdata->THREADS)
+	{
+		tdata->work_fcn_id = 0;
+		sdata->sync_count++;
+	}
+	else
+	{
+		tdata->work_fcn_id = tdata->num_work_fcn;
+	}
+
+	return;
+}
+
+void sieve_lines_work_fcn(void* vptr)
+{
+	tpool_t* tdata = (tpool_t*)vptr;
+	soe_userdata_t* udata = (soe_userdata_t*)tdata->user_data;
+	soe_staticdata_t* sdata = udata->sdata;
+	thread_soedata_t* t = &udata->ddata[tdata->tindex];
+
+	sieve_line_ptr(t);
+	trim_line(sdata, t->current_line);
+	t->linecount = count_line(&t->sdata, t->current_line);
+
+	return;
+}
+
+uint64_t sieve(soe_staticdata_t* sdata, thread_soedata_t* thread_data,
+	uint32_t start_count, uint64_t* primes)
+{
+	// sieve all classes of a block
+	int i;
+	int j;
+	uint32_t range, lastid;
+
+	//timing
+	double t;
+	struct timeval tstart, tstop;
+
+	// threading structures
+	tpool_t* tpool_data;
+	soe_userdata_t udata;
+
+	if (sdata->VFLAG > 1)
+	{
+		gettimeofday(&tstart, NULL);
+	}
+
+	// assign each thread a number of continguous blocks.
+	range = sdata->blocks / sdata->THREADS + ((sdata->blocks % sdata->THREADS) > 0);
+	lastid = 0;
+	for (i = 0; i < sdata->THREADS; i++)
+	{
+		thread_soedata_t* t = thread_data + i;
+
+		t->sdata = *sdata;
+		t->startid = lastid;
+		t->stopid = MAX(t->startid + range, sdata->blocks);
+		lastid = t->stopid;
+
+		if (sdata->VFLAG > 2)
+		{
+			printf("thread %d sieveing blocks %u to %u\n",
+				(int)i, t->startid, t->stopid);
+		}
+	}
+
+	udata.sdata = sdata;
+	udata.ddata = thread_data;
+	tpool_data = tpool_setup(sdata->THREADS, NULL, NULL, NULL,
+		&sieve_lines_dispatch, &udata);
+
+	if (sdata->THREADS == 1)
+	{
+		sieve_work_fcn(tpool_data);
+	}
+	else
+	{
+		sdata->sync_count = 0;
+		tpool_add_work_fcn(tpool_data, &sieve_lines_work_fcn);
+		tpool_go(tpool_data);
+	}
+	free(tpool_data);
+
+	if (sdata->VFLAG > 1)
+	{
+		gettimeofday(&tstop, NULL);
+
+		t = ytools_difftime(&tstart, &tstop);
+
+		if (sdata->VFLAG > 2)
+		{
+			printf("time to sieve blocks = %1.4f\n", t);
+		}
+	}
+
+	return;
+}
 
