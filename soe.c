@@ -1203,6 +1203,8 @@ void finalize_sieve(soe_staticdata_t *sdata,
         align_free(sdata->lines);
     }
 
+    free(sdata->steps_map);
+    free(sdata->classid_lookup);
     align_free(sdata->r2modp);
     align_free(sdata->pinv);
     align_free(sdata->root);

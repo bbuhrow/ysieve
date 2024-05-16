@@ -3355,6 +3355,15 @@ void sieve_line_avx2_512k(thread_soedata_t* thread_data)
 }
 #endif
 
+uint16_t get_steps(soe_staticdata_t* sdata, uint32_t class_from, uint32_t class_to, uint32_t step_by)
+{
+	uint32_t class_to_id = sdata->classid_lookup[class_to];
+	uint32_t class_from_id = sdata->classid_lookup[class_from];
+	uint32_t step_by_id = sdata->classid_lookup[step_by];
+	uint32_t nc = sdata->numclasses;
+
+	return sdata->steps_map[class_to_id * nc * nc + class_from_id * nc + step_by_id];
+}
 
 void get_line_offsets(thread_soedata_t* thread_data)
 {
@@ -3363,7 +3372,7 @@ void get_line_offsets(thread_soedata_t* thread_data)
 	soe_staticdata_t* sdata = &thread_data->sdata;
 
 	uint64_t startprime = sdata->startprime, prodN = sdata->prodN;
-	uint32_t i, prime, root, bnum;
+	uint32_t i, prime, root, bnum, nc = sdata->numclasses;
 	int s;
 	int FLAGSIZE = sdata->FLAGSIZE;
 	int FLAGBITS = sdata->FLAGBITS;
@@ -3383,8 +3392,7 @@ void get_line_offsets(thread_soedata_t* thread_data)
 		uint32_t class_loc = p2 % prodN;
 		uint32_t class_prime = prime % prodN;
 
-		while ((p2 % prodN) != sdata->rclass[thread_data->current_line])
-			p2 += prime;
+		uint16_t steps = get_steps(sdata, class_loc, sdata->rclass[thread_data->current_line], class_prime);
 
 
 	}
@@ -3415,6 +3423,7 @@ void sieve_lines(thread_soedata_t* thread_data)
 	uint32_t i, j, k;
 	uint32_t prime;
 	int stopid;
+
 
 	for (i = thread_data->startid; i < thread_data->stopid; i++)
 	{

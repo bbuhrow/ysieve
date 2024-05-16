@@ -75,7 +75,8 @@ typedef struct
 	uint32_t alloc_sp;
 	int *root;
 	uint32_t *lower_mod_prime;
-
+	uint16_t* steps_map;
+	uint16_t* classid_lookup;
     uint32_t *pinv;       // montgomery inverse
     uint32_t *r2modp;     // to go out of montgomery rep
 

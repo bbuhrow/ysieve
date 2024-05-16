@@ -835,6 +835,51 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
         //exit(0);
     }
 
+    sdata->steps_map = (uint16_t*)xmalloc(sdata->numclasses * sdata->numclasses * sdata->numclasses * sizeof(uint16_t));
+    sdata->classid_lookup = (uint16_t*)xmalloc(sdata->numclasses * sizeof(uint16_t));
+    if (1) //sdata->is_main_sieve)
+    {
+        int nc = sdata->numclasses;
+        
+        for (i = 0; i < nc; i++)
+        {
+            int j;
+            sdata->classid_lookup[sdata->rclass[i]] = i;
+
+            for (j = 0; j < nc; j++)
+            {
+                int class_to = sdata->rclass[i];
+                int class_from = sdata->rclass[j];
+                int steps;
+
+                if (i != j)
+                {
+                    int k;
+                    //printf("from %02d to %02d: ", class_from, class_to);
+
+                    for (k = 0; k < nc; k++)
+                    {
+                        int step_by = sdata->rclass[k];
+                        int classnum = class_from;
+                        int numsteps = 0;
+
+                        while (classnum != class_to)
+                        {
+                            classnum += step_by;
+                            if (classnum >= sdata->prodN)
+                                classnum -= sdata->prodN;
+                            numsteps++;
+                        }
+                        sdata->steps_map[i * nc * nc + j * nc + k] = numsteps;
+                        //printf("%02d ", numsteps);
+                    }
+                   // printf("\n");
+                }
+            }
+        }
+
+        //exit(0);
+    }
 
     sdata->min_sieved_val = 1ULL << 63;
 

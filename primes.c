@@ -1219,7 +1219,7 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
             // bytes for a set of 8 classes.
             for (j = 0; j < 33; j++)
             {
-                aligned_flags[j] = interleave_pdep_8x8(
+                aligned_flags[j] = interleave_avx2_bmi2_pdep(
                     lines[(j * 8) + 0][byte_offset + i],
                     lines[(j * 8) + 1][byte_offset + i],
                     lines[(j * 8) + 2][byte_offset + i],
@@ -1230,7 +1230,7 @@ uint32_t compute_8_bytes_bmi2(soe_staticdata_t *sdata,
                     lines[(j * 8) + 7][byte_offset + i]);
             }
 
-            aligned_flags[j] = interleave_pdep_8x8(
+            aligned_flags[j] = interleave_avx2_bmi2_pdep(
                 lines[(j * 8) + 0][byte_offset + i],
                 lines[(j * 8) + 1][byte_offset + i],
                 lines[(j * 8) + 2][byte_offset + i],
