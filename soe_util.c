@@ -836,11 +836,12 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
     }
 
     sdata->steps_map = (uint16_t*)xmalloc(sdata->numclasses * sdata->numclasses * sdata->numclasses * sizeof(uint16_t));
-    sdata->classid_lookup = (uint16_t*)xmalloc(sdata->numclasses * sizeof(uint16_t));
+    sdata->classid_lookup = (uint16_t*)xmalloc(prodN * sizeof(uint16_t));
     if (1) //sdata->is_main_sieve)
     {
         int nc = sdata->numclasses;
-        
+        printf("creating steps lookup table for numclasses = %d\n", nc);
+        printf("table size is %u elements\n", nc * nc * nc);
         for (i = 0; i < nc; i++)
         {
             int j;
@@ -867,13 +868,15 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
                         {
                             classnum += step_by;
                             if (classnum >= sdata->prodN)
+                            {
                                 classnum -= sdata->prodN;
+                            }
                             numsteps++;
                         }
                         sdata->steps_map[i * nc * nc + j * nc + k] = numsteps;
                         //printf("%02d ", numsteps);
                     }
-                   // printf("\n");
+                    //printf("\n");
                 }
             }
         }
@@ -1063,7 +1066,7 @@ uint64_t init_sieve(soe_staticdata_t *sdata)
     sdata->lines = (uint8_t **)xmalloc_align(sdata->numclasses * sizeof(uint8_t *));
     numbytes = 0;
     
-    if ((sdata->only_count == 0) || (sdata->analysis > 1) || (sdata->num_bitmap_primes > 0))
+    if (1) //(sdata->only_count == 0) || (sdata->analysis > 1) || (sdata->num_bitmap_primes > 0))
     {
         numbytes += sdata->numclasses * numlinebytes * sizeof(uint8_t);
 
@@ -1297,7 +1300,9 @@ uint64_t alloc_threaddata(soe_staticdata_t *sdata, thread_soedata_t *thread_data
 		// doesn't use the offset array.
         j = MIN(sdata->pboundi, sdata->BUCKETSTARTI);
         thread->ddata.offsets = (uint32_t *)xmalloc_align(j * sizeof(uint32_t));
-		allocated_bytes += j * sizeof(uint32_t);
+        thread->ddata.initial_offsets = (uint32_t*)xmalloc_align(j * sizeof(uint32_t));
+
+		allocated_bytes += 2 * j * sizeof(uint32_t);
 		if (thread->ddata.offsets == NULL)
 		{
 			printf("error allocating offsets\n");

@@ -51,6 +51,10 @@ SOFTWARE.
 //#define BITLOGIC32   /* 17.20 */
 #endif
 
+uint16_t get_steps(soe_staticdata_t* sdata, uint32_t class_from, uint32_t class_to, uint32_t step_by);
+void get_line_offsets(thread_soedata_t* thread_data);
+
+
 // sieve all blocks of a line, i.e., a row of the sieve area.
 void sieve_line(thread_soedata_t *thread_data)
 {
@@ -3355,14 +3359,254 @@ void sieve_line_avx2_512k(thread_soedata_t* thread_data)
 }
 #endif
 
-uint16_t get_steps(soe_staticdata_t* sdata, uint32_t class_from, uint32_t class_to, uint32_t step_by)
+__inline uint16_t get_steps(soe_staticdata_t* sdata, uint32_t class_from_id, 
+	uint32_t class_to_id, uint32_t step_by)
 {
-	uint32_t class_to_id = sdata->classid_lookup[class_to];
-	uint32_t class_from_id = sdata->classid_lookup[class_from];
 	uint32_t step_by_id = sdata->classid_lookup[step_by];
 	uint32_t nc = sdata->numclasses;
-
 	return sdata->steps_map[class_to_id * nc * nc + class_from_id * nc + step_by_id];
+}
+
+void get_line_one_offsets(thread_soedata_t* thread_data)
+{
+	//extract stuff from the thread data structure
+	soe_dynamicdata_t* ddata = &thread_data->ddata;
+	soe_staticdata_t* sdata = &thread_data->sdata;
+
+	uint64_t startprime = sdata->startprime, prodN = sdata->prodN;
+	uint32_t i, prime, root, bnum, nc = sdata->numclasses, class_loc, class_prime;
+	int s;
+	int FLAGSIZE = sdata->FLAGSIZE;
+	int FLAGBITS = sdata->FLAGBITS;
+
+	//printf("computing offsets for class %d from prime id %u to %u\n", 
+	//	sdata->rclass[thread_data->current_line], startprime, sdata->bucket_start_id);
+
+	// assumes lowlimit = 0.
+	uint32_t last_steps = 16;
+	uint32_t last_steps1 = 16;
+
+	if (thread_data->current_line == 0)
+	{
+		sdata->medbound_16x = sdata->medbound_8x = sdata->medbound_4x = sdata->pboundi;
+		sdata->medbound_first_16x = sdata->medbound_first_8x = sdata->medbound_first_4x = sdata->pboundi;
+	
+		for (i = 0; i < sdata->blocks; i++)
+		{
+			ddata->pbounds[i] = sdata->pboundi;
+		}
+	}
+
+	uint32_t current_block = 0;
+	uint64_t block_upper = sdata->FLAGSIZE;
+	uint64_t block_lower = 0;
+
+	for (i = startprime; i < sdata->bucket_start_id; i++)
+	{
+		prime = sdata->sieve_p[i];
+
+		uint64_t p2;
+		
+		// presieved primes want to start at the prime offset
+		if (i < sdata->presieve_max_id)
+			p2 = prime;
+		else
+			p2 = (uint64_t)prime * (uint64_t)prime;
+
+		// given the class of this prime square and the class
+		// of the prime itself we can use a lookup table for
+		// how many steps to the desired starting class.
+		// division by a small fixed constant should be compiled
+		// to something fairly fast.  Further we only do it for the
+		// first class and store the results.
+		if ((p2 / prodN) > block_upper)
+		{
+			//printf("block %d pid bound is now %u\n", current_block, i);
+			ddata->pbounds[current_block] = i;
+			current_block++;
+			block_upper += sdata->FLAGSIZE;
+			block_lower += sdata->FLAGSIZE;
+		}
+
+		if (thread_data->current_line == 0)
+		{
+			switch (prodN)
+			{
+			case 6:
+				sdata->lower_mod_prime[i] = p2 % 6ull;
+				sdata->r2modp[i] = prime % 6ull;
+				break;
+			case 30:
+				sdata->lower_mod_prime[i] = p2 % 30ull;
+				sdata->r2modp[i] = prime % 30ull;
+				break;
+			case 210:
+				sdata->lower_mod_prime[i] = p2 % 210ull;
+				sdata->r2modp[i] = prime % 210ull;
+				break;
+			case 2310:
+				sdata->lower_mod_prime[i] = p2 % 2310ull;
+				sdata->r2modp[i] = prime % 2310ull;
+				break;
+			}
+		}
+
+		uint16_t steps;
+		uint32_t class_from_id = sdata->classid_lookup[sdata->lower_mod_prime[i]];
+
+		if (class_from_id == thread_data->current_line)
+			steps = 0;
+		else 
+			steps = get_steps(sdata, class_from_id,
+				thread_data->current_line, sdata->r2modp[i]);
+
+		switch (prodN)
+		{
+		case 6:
+			ddata->offsets[i] = (p2 + (uint64_t)steps * (uint64_t)prime -
+				sdata->rclass[thread_data->current_line]) / 6ull - block_lower;
+			break;
+		case 30:
+			ddata->offsets[i] = (p2 + (uint64_t)steps * (uint64_t)prime -
+				sdata->rclass[thread_data->current_line]) / 30ull - block_lower;
+			break;
+		case 210:
+			ddata->offsets[i] = (p2 + (uint64_t)steps * (uint64_t)prime -
+				sdata->rclass[thread_data->current_line]) / 210ull - block_lower;
+			break;
+		case 2310:
+			ddata->offsets[i] = (p2 + (uint64_t)steps * (uint64_t)prime -
+				sdata->rclass[thread_data->current_line]) / 2310ull - block_lower;
+			break;
+		}
+
+		ddata->initial_offsets[i] = ddata->offsets[i];
+
+		//if (((p2 + (uint64_t)steps * (uint64_t)prime -
+		//	sdata->rclass[thread_data->current_line]) / prodN) < block_lower)
+		//{
+		//	printf("invalid offset!\n");
+		//	printf("prime = %u, p2 = %lu, steps = %u, class = %u, offset = %lu, lower_bound = %lu\n",
+		//		prime, p2, steps, sdata->rclass[thread_data->current_line],
+		//		ddata->offsets[i], block_lower);
+		//	exit(1);
+		//}
+
+		if ((i > sdata->presieve_max_id) && (thread_data->current_line == 0))
+		{
+			uint32_t min_steps = 0;
+			uint32_t max_offset = 0;
+			uint32_t min_steps2 = 0;
+
+			max_offset = (p2 + (prodN - 1) * prime -
+				sdata->rclass[thread_data->current_line]) / prodN;
+
+			if (max_offset < sdata->FLAGSIZE)
+				min_steps = (sdata->FLAGSIZE - max_offset) / prime;
+
+			max_offset = prime / prodN + 1;
+
+			if (max_offset < sdata->FLAGSIZE)
+				min_steps2 = (sdata->FLAGSIZE - max_offset) / prime;
+
+			if ((min_steps < 16) && (last_steps1 == 16))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u\n",
+				//	sdata->sieve_p[i - 1], i - 1, min_steps);
+				sdata->medbound_first_16x = i - 1;
+				last_steps1 = 8;
+			}
+
+			if ((min_steps < 8) && (last_steps1 == 8))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u\n",
+				//	sdata->sieve_p[i - 1], i - 1, min_steps);
+				sdata->medbound_first_8x = i - 1;
+				last_steps1 = 4;
+			}
+
+			if ((min_steps < 4) && (last_steps1 == 4))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u\n",
+				//	sdata->sieve_p[i - 1], i - 1, min_steps);
+				sdata->medbound_first_4x = i - 1;
+				last_steps1 = 0;
+			}
+
+			if ((min_steps2 < 16) && (last_steps == 16))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u, in other blocks = %u\n", 
+				//	sdata->sieve_p[i-1], i-1, min_steps, min_steps2);
+				sdata->medbound_16x = i-1;
+				last_steps = 8;
+			}
+
+			if ((min_steps2 < 8) && (last_steps == 8))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u, in other blocks = %u\n",
+				//	sdata->sieve_p[i-1], i-1, min_steps, min_steps2);
+				sdata->medbound_8x = i-1;
+				last_steps = 4;
+			}
+
+			if ((min_steps2 < 4) && (last_steps == 4))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u, in other blocks = %u\n",
+				//	sdata->sieve_p[i-1], i-1, min_steps, min_steps2);
+				sdata->medbound_4x = i-1;
+				last_steps = 0;
+			}
+		}
+	}
+
+	return;
+}
+
+void update_line_offsets(thread_soedata_t* thread_data)
+{
+	//extract stuff from the thread data structure
+	soe_dynamicdata_t* ddata = &thread_data->ddata;
+	soe_staticdata_t* sdata = &thread_data->sdata;
+
+	uint64_t startprime = sdata->startprime, prodN = sdata->prodN;
+	uint32_t i, prime, root, bnum, nc = sdata->numclasses, class_loc, class_prime;
+	int s;
+	int FLAGSIZE = sdata->FLAGSIZE;
+	int FLAGBITS = sdata->FLAGBITS;
+
+	for (i = startprime; i < sdata->bucket_start_id; i++)
+	{
+		prime = sdata->sieve_p[i];
+
+		uint16_t steps;
+		uint32_t class_from_id = thread_data->current_line - 1;
+
+		steps = get_steps(sdata, class_from_id,
+			thread_data->current_line, sdata->r2modp[i]);
+
+		// cool, but what if steps can be negative and still be in the interval?
+		switch (prodN)
+		{
+		case 6:
+			ddata->offsets[i] = (ddata->initial_offsets[i] + (uint64_t)steps * (uint64_t)prime -
+				sdata->rclass[thread_data->current_line]) / 6ull;
+			break;
+		case 30:
+			ddata->offsets[i] = (ddata->initial_offsets[i] + (uint64_t)steps * (uint64_t)prime -
+				sdata->rclass[thread_data->current_line]) / 30ull;
+			break;
+		case 210:
+			ddata->offsets[i] = (ddata->initial_offsets[i] + (uint64_t)steps * (uint64_t)prime -
+				sdata->rclass[thread_data->current_line]) / 210ull;
+			break;
+		case 2310:
+			ddata->offsets[i] = (ddata->initial_offsets[i] + (uint64_t)steps * (uint64_t)prime -
+				sdata->rclass[thread_data->current_line]) / 2310ull;
+			break;
+		}
+	}
+
+	return;
 }
 
 void get_line_offsets(thread_soedata_t* thread_data)
@@ -3372,31 +3616,150 @@ void get_line_offsets(thread_soedata_t* thread_data)
 	soe_staticdata_t* sdata = &thread_data->sdata;
 
 	uint64_t startprime = sdata->startprime, prodN = sdata->prodN;
-	uint32_t i, prime, root, bnum, nc = sdata->numclasses;
+	uint32_t i, prime, root, bnum, nc = sdata->numclasses, block = 0;
+	uint64_t tmp2;
+	int current_line = thread_data->current_line;
 	int s;
 	int FLAGSIZE = sdata->FLAGSIZE;
 	int FLAGBITS = sdata->FLAGBITS;
 
+	//printf("computing offsets for class %d from prime id %u to %u\n", 
+	//	sdata->rclass[thread_data->current_line], startprime, sdata->bucket_start_id);
+
 	// assumes lowlimit = 0.
+	uint32_t last_steps = 16;
+	uint32_t last_steps1 = 16;
+
+	if (thread_data->current_line == 0)
+	{
+		sdata->medbound_16x = sdata->medbound_8x = sdata->medbound_4x = sdata->pboundi;
+		sdata->medbound_first_16x = sdata->medbound_first_8x = sdata->medbound_first_4x = sdata->pboundi;
+
+		for (i = 0; i < sdata->blocks; i++)
+		{
+			ddata->pbounds[i] = sdata->bucket_start_id;
+		}
+	}
+
+	mpz_t gmp_sqrt;
+	mpz_init(gmp_sqrt);
+
 	for (i = startprime; i < sdata->bucket_start_id; i++)
 	{
 		prime = sdata->sieve_p[i];
 
-		uint64_t p2 = (uint64_t)prime * (uint64_t)prime;
+		// find the first multiple of the prime which is greater than the first sieve location 
+		// and also equal to the residue class mod 'prodN'.  
+		// we need to solve the congruence: rclass[current_line] == kp mod prodN for k
+		// xGCD gives r and s such that r*p + s*prodN = gcd(p,prodN).
+		// then k = r*class/gcd(p,prodN) is a solution.
+		// the gcd of p and prodN is always 1 by construction of prodN and choice of p.  
+		// therefore k = r * class is a solution.  furthermore, since the gcd is 1, there
+		// is only one solution.  
+		// xGCD_1((int)prime,(int)prodN,&r,&s,&tmp);
 
-		// given the class of this prime square and the class
-		// of the prime itself we can use a lookup table for
-		// how many steps to the desired starting class.
-		// division by a small fixed constant should be compiled
-		// to something fairly fast.
-		uint32_t class_loc = p2 % prodN;
-		uint32_t class_prime = prime % prodN;
+		// To speed things up we solve and store modinv(prodN, prime) for every prime (only
+		// needs to be done once, in roots.c).  Then to get the offset for the current block
+		// we just need to multiply the stored root with the starting sieve location (mod p).	
 
-		uint16_t steps = get_steps(sdata, class_loc, sdata->rclass[thread_data->current_line], class_prime);
+		// if the prime is greater than the limit at which it is necessary to sieve
+		// a block, start that prime in the next block.
+		if (sdata->sieve_p[i] > ddata->blk_b_sqrt)
+		{
+			//printf("lblk_b = %lu, blk_b_sqrt = %lu, pbounds block %lu = %lu (%u)\n", 
+			//    ddata->lblk_b, ddata->blk_b_sqrt, block, i, sdata->sieve_p[i]);
+			ddata->pbounds[block] = i;
 
+			// if (block < (sdata->blocks - 0)) // <-- sometimes crashes, but correct ranges
+			// if (block < (sdata->blocks - 1)) // <-- no crashes, but incorrect ranges
+			if (block < (sdata->blocks - 1))
+				block++;
+			ddata->lblk_b = ddata->ublk_b + prodN;
+			ddata->ublk_b += sdata->blk_r;
+			//ddata->blk_b_sqrt = (uint64_t)(sqrt((int64_t)(ddata->ublk_b + prodN))) + 1;
+			mpz_set_ui(gmp_sqrt, ddata->ublk_b + prodN);
+			mpz_sqrt(gmp_sqrt, gmp_sqrt);
+			ddata->blk_b_sqrt = mpz_get_ui(gmp_sqrt) + 1;
+		}
 
+		s = sdata->root[i];
+
+		// the lower block bound (lblk_b) times s can exceed 64 bits for large ranges,
+		// so reduce mod p here as well.
+		tmp2 = (uint64_t)s * (ddata->lblk_b % (uint64_t)prime);
+
+		// tmp2 = (uint64_t)s * (uint64_t)(lmp[i] + diff);
+		ddata->offsets[i] = (uint32_t)(tmp2 % (uint64_t)prime);
+	
+
+		if ((i > sdata->presieve_max_id) && (thread_data->current_line == 0))
+		{
+			uint32_t min_steps = 0;
+			uint32_t max_offset = 0;
+			uint32_t min_steps2 = 0;
+
+			max_offset = prime;
+
+			if (max_offset < sdata->FLAGSIZE)
+				min_steps = (sdata->FLAGSIZE - max_offset) / prime;
+
+			max_offset = prime;
+
+			if (max_offset < sdata->FLAGSIZE)
+				min_steps2 = (sdata->FLAGSIZE - max_offset) / prime;
+
+			if ((min_steps < 16) && (last_steps1 == 16))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u\n",
+				//	sdata->sieve_p[i - 1], i - 1, min_steps);
+				sdata->medbound_first_16x = i - 1;
+				last_steps1 = 8;
+			}
+
+			if ((min_steps < 8) && (last_steps1 == 8))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u\n",
+				//	sdata->sieve_p[i - 1], i - 1, min_steps);
+				sdata->medbound_first_8x = i - 1;
+				last_steps1 = 4;
+			}
+
+			if ((min_steps < 4) && (last_steps1 == 4))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u\n",
+				//	sdata->sieve_p[i - 1], i - 1, min_steps);
+				sdata->medbound_first_4x = i - 1;
+				last_steps1 = 0;
+			}
+
+			if ((min_steps2 < 16) && (last_steps == 16))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u, in other blocks = %u\n", 
+				//	sdata->sieve_p[i-1], i-1, min_steps, min_steps2);
+				sdata->medbound_16x = i - 1;
+				last_steps = 8;
+			}
+
+			if ((min_steps2 < 8) && (last_steps == 8))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u, in other blocks = %u\n",
+				//	sdata->sieve_p[i-1], i-1, min_steps, min_steps2);
+				sdata->medbound_8x = i - 1;
+				last_steps = 4;
+			}
+
+			if ((min_steps2 < 4) && (last_steps == 4))
+			{
+				//printf("prime %u index %u min steps in 1st block = %u, in other blocks = %u\n",
+				//	sdata->sieve_p[i-1], i-1, min_steps, min_steps2);
+				sdata->medbound_4x = i - 1;
+				last_steps = 0;
+			}
+		}
+	
 	}
 
+	mpz_clear(gmp_sqrt);
 
 	return;
 }
@@ -3420,38 +3783,299 @@ void sieve_lines(thread_soedata_t* thread_data)
 	uint32_t* nptr;
 	uint32_t linesize = FLAGSIZE * sdata->blocks, bnum;
 
-	uint32_t i, j, k;
+	uint32_t i, j, k, pid;
 	uint32_t prime;
 	int stopid;
+	uint8_t* thisblock;
 
+	thread_data->linecount = 0;
 
-	for (i = thread_data->startid; i < thread_data->stopid; i++)
+	// for the current line, find the starting offset of
+	// all small and medium primes in this thread's blocks.
+	thread_data->current_line = 0;
+	
+
+	for (j = 0; j < sdata->numclasses; j++)
 	{
-		bucket_sort(thread_data);
+		uint8_t* line = sdata->lines[j];
+		thread_data->current_line = j;
 
-		for (j = 0; j < sdata->numclasses; j++)
+		ddata->lblk_b = sdata->lowlimit + thread_data->startid * sdata->prodN * sdata->FLAGSIZE +
+			sdata->rclass[thread_data->current_line];
+		ddata->ublk_b = sdata->blk_r + ddata->lblk_b - sdata->prodN;
+		ddata->blk_b_sqrt = (sqrt(ddata->ublk_b + sdata->prodN)) + 1;
+
+		// update the starting offset for this class
+		//if (j > 0)
+		//	update_line_offsets(thread_data);
+		get_line_offsets(thread_data);
+
+		if (j == 0)
 		{
-			uint8_t* line = sdata->lines[j];
-			thread_data->current_line = j;
+			printf("small prime 1st block sieve bounds: presieve(%d), 16x(%d), 8x(%d), 4x(%d)\n",
+				sdata->presieve_max_id,
+				sdata->medbound_first_16x, sdata->medbound_first_8x, sdata->medbound_first_4x);
 
-			// for the current line, find the starting offset of
-			// all small and medium primes in this thread's blocks.
-			get_line_offsets(thread_data);
+			printf("small prime sieve bounds: presieve(%d), 16x(%d), 8x(%d), 4x(%d)\n",
+				sdata->presieve_max_id,
+				sdata->medbound_16x, sdata->medbound_8x, sdata->medbound_4x);
+		}
 
+		//bucket_sort(thread_data);
+
+		for (i = thread_data->startid; i < thread_data->stopid; i++)
+		{
 			// set all flags for this block, which also puts 
 			// it into cache for the sieving to follow.  
-			memset(line, 255, SOEBLOCKSIZE);
+			thisblock = line + i * SOEBLOCKSIZE;
+			memset(thisblock, 255, SOEBLOCKSIZE);
+			uint32_t blocknum = i - thread_data->startid;
+
+			if (sdata->sieve_range == 0)
+			{
+				// one is not a prime
+				if ((sdata->rclass[j] == 1) &&
+					(sdata->lowlimit <= 1) && (i == 0))
+					thisblock[0] &= 0xfe;
+			}
+			else
+			{
+				if ((sdata->rclass[j] == 1) &&
+					(mpz_cmp_ui(*sdata->offset, 1) <= 0) && (i == 0))
+					thisblock[0] &= 0xfe;
+			}
 
 			// smallest primes use special methods
-			pre_sieve_ptr(ddata, sdata, line);
+			//printf("presieve block %d\n", i);
+			pre_sieve_ptr(ddata, sdata, thisblock);
 
-			// start where presieving left off, which is different for various cpus.
-			k = sdata->presieve_max_id;
+			// start where presieving left off
+			pid = sdata->presieve_max_id;
+
+			// these primes can make at least 16 steps in the current block
+			uint32_t max_id = (i == 0) ? MIN(sdata->medbound_first_16x, ddata->pbounds[blocknum]) :
+				MIN(sdata->medbound_16x, ddata->pbounds[blocknum]);
+			//printf("16x-sieve block %d to bound %u\n", i, max_id);
+			for (; pid < max_id; pid++)
+			{
+				uint32_t tmpP;
+				uint64_t stop;
+				uint64_t p1, p2, p3;
+
+				prime = sdata->sieve_p[pid];
+
+				// we store byte masks to speed things up.  The byte masks
+				// are addressed by index % 8.  However, (k+p) % 8 is
+				// the same as (k+8p) % 8 so it suffices to compute and
+				// store in registers (k+np) % 8 for n = 0:7.  Thanks to 
+				// tverniquet for discovering this optimization.
+				// The precomputed mask trick works well here because many
+				// of these primes actually hit the interval many more
+				// than 16 times, thus we get a lot of reuse out of
+				// the masks.  In subsequent loops this isn't true.
+				uint8_t m0;
+				uint8_t m1;
+				uint8_t m2;
+				uint8_t m3;
+				uint8_t m4;
+				uint8_t m5;
+				uint8_t m6;
+				uint8_t m7;
+
+				tmpP = prime << 4;
+				stop = FLAGSIZE - tmpP + prime;
+				k = ddata->offsets[pid];
+
+				p1 = prime;
+				p2 = p1 + prime;
+				p3 = p2 + prime;
+
+				m0 = masks[k & 7];
+				m1 = masks[(k + p1) & 7];
+				m2 = masks[(k + p2) & 7];
+				m3 = masks[(k + p3) & 7];
+				m4 = masks[(k + 4 * prime) & 7];
+				m5 = masks[(k + 5 * prime) & 7];
+				m6 = masks[(k + 6 * prime) & 7];
+				m7 = masks[(k + 7 * prime) & 7];
+
+				while (k < stop)
+				{
+					thisblock[k >> 3] &= m0;
+					thisblock[(k + p1) >> 3] &= m1;
+					thisblock[(k + p2) >> 3] &= m2;
+					thisblock[(k + p3) >> 3] &= m3;
+					k += (prime << 2);
+					thisblock[k >> 3] &= m4;
+					thisblock[(k + p1) >> 3] &= m5;
+					thisblock[(k + p2) >> 3] &= m6;
+					thisblock[(k + p3) >> 3] &= m7;
+					k += (prime << 2);
+					thisblock[k >> 3] &= m0;
+					thisblock[(k + p1) >> 3] &= m1;
+					thisblock[(k + p2) >> 3] &= m2;
+					thisblock[(k + p3) >> 3] &= m3;
+					k += (prime << 2);
+					thisblock[k >> 3] &= m4;
+					thisblock[(k + p1) >> 3] &= m5;
+					thisblock[(k + p2) >> 3] &= m6;
+					thisblock[(k + p3) >> 3] &= m7;
+					k += (prime << 2);
+				}
+
+				for (; k < FLAGSIZE; k += prime)
+					thisblock[k >> 3] &= masks[k & 7];
+
+				ddata->offsets[pid] = k - FLAGSIZE;
+
+			}
+
+			// 8 steps
+			max_id = (i == 0) ? MIN(sdata->medbound_first_8x, ddata->pbounds[blocknum]) :
+				MIN(sdata->medbound_8x, ddata->pbounds[blocknum]);
+			//printf("8x-sieve block %d to bound %u\n", i, max_id);
+			for (; pid < max_id; pid++)
+			{
+				uint32_t tmpP;
+				uint64_t stop;
+				uint64_t p1, p2, p3;
+
+				prime = sdata->sieve_p[pid];
+
+				tmpP = prime << 3;
+				stop = FLAGSIZE - tmpP + prime;
+				k = ddata->offsets[pid];
+				p1 = prime;
+				p2 = p1 + prime;
+				p3 = p2 + prime;
+
+				while (k < stop)
+				{
+					thisblock[k >> 3] &= masks[k & 7];
+					thisblock[(k + p1) >> 3] &= masks[(k + p1) & 7];
+					thisblock[(k + p2) >> 3] &= masks[(k + p2) & 7];
+					thisblock[(k + p3) >> 3] &= masks[(k + p3) & 7];
+					k += (prime << 2);
+					thisblock[k >> 3] &= masks[k & 7];
+					thisblock[(k + p1) >> 3] &= masks[(k + p1) & 7];
+					thisblock[(k + p2) >> 3] &= masks[(k + p2) & 7];
+					thisblock[(k + p3) >> 3] &= masks[(k + p3) & 7];
+					k += (prime << 2);
+				}
+
+				for (; k < FLAGSIZE; k += prime)
+					thisblock[k >> 3] &= masks[k & 7];
+
+				ddata->offsets[pid] = (uint32_t)(k - FLAGSIZE);
+
+			}
+
+			// 4 steps
+			max_id = (i == 0) ? MIN(sdata->medbound_first_4x, ddata->pbounds[blocknum]) :
+				MIN(sdata->medbound_4x, ddata->pbounds[blocknum]);
+			//printf("4x-sieve block %d to bound %u\n", i, max_id);
+			for (; pid < max_id; pid++)
+			{
+				uint32_t tmpP;
+				uint64_t stop;
+				uint64_t p1, p2, p3;
+
+				prime = sdata->sieve_p[pid];
+
+				tmpP = prime << 2;
+				stop = FLAGSIZE - tmpP + prime;
+				k = ddata->offsets[pid];
+				p1 = prime;
+				p2 = p1 + prime;
+				p3 = p2 + prime;
+				while (k < stop)
+				{
+					thisblock[k >> 3] &= masks[k & 7];
+					thisblock[(k + p1) >> 3] &= masks[(k + p1) & 7];
+					thisblock[(k + p2) >> 3] &= masks[(k + p2) & 7];
+					thisblock[(k + p3) >> 3] &= masks[(k + p3) & 7];
+					k += (prime << 2);
+				}
+
+				for (; k < FLAGSIZE; k += prime)
+					thisblock[k >> 3] &= masks[k & 7];
+
+				ddata->offsets[pid] = (uint32_t)(k - FLAGSIZE);
+
+			}
+
+			//printf("sieve block %d to bound %u\n", i, ddata->pbounds[blocknum]);
+			// smaller than FLAGSIZE
+			for (; pid < ddata->pbounds[blocknum]; pid++)
+			{
+				prime = sdata->sieve_p[pid];
+
+				// once the prime is larger than the block we 
+				// no longer need the loop overhead
+				if (prime > FLAGSIZE)
+					break;
+
+				for (k = ddata->offsets[pid]; k < FLAGSIZE; k += prime)
+				{
+					thisblock[k >> 3] &= masks[k & 7];
+				}
+
+				ddata->offsets[pid] = (uint32_t)(k - FLAGSIZE);
+			}
+
+			// larger than FLAGSIZE
+			for (; pid < ddata->pbounds[blocknum]; pid++)
+			{
+				k = ddata->offsets[pid];
+				if (ddata->offsets[pid] < FLAGSIZE)
+				{
+					thisblock[k >> 3] &= masks[k & 7];
+					k += sdata->sieve_p[pid];
+				}
+				ddata->offsets[pid] = (uint32_t)(k - FLAGSIZE);
+			}
+
+			// dump in buckets
+
+
 		}
+
+		trim_line(sdata, thread_data->current_line);
+		thread_data->linecount += count_line(sdata, thread_data->current_line);
+
+		
+	}
+
+
+	return;
+}
+
+void sieve_lines_sync(void* vptr)
+{
+	tpool_t* tdata = (tpool_t*)vptr;
+	soe_userdata_t* udata = (soe_userdata_t*)tdata->user_data;
+	soe_staticdata_t* sdata = udata->sdata;
+	thread_soedata_t* t = &udata->ddata[tdata->tindex];
+
+	if (sdata->VFLAG > 1)
+	{
+		//don't print status if computing primes, because lots of routines within
+		//yafu do this and they don't want this side effect
+		printf("sieving: %d%%\r",
+			(int)((double)sdata->sync_count / (double)(sdata->numclasses) * 100.0));
+		fflush(stdout);
+	}
+
+	sdata->num_found += t->linecount;
+
+	if (t->ddata.min_sieved_val < sdata->min_sieved_val)
+	{
+		sdata->min_sieved_val = t->ddata.min_sieved_val;
 	}
 
 	return;
 }
+
 
 void sieve_lines_dispatch(void* vptr)
 {
@@ -3481,15 +4105,14 @@ void sieve_lines_work_fcn(void* vptr)
 	soe_staticdata_t* sdata = udata->sdata;
 	thread_soedata_t* t = &udata->ddata[tdata->tindex];
 
-	sieve_line_ptr(t);
-	trim_line(sdata, t->current_line);
-	t->linecount = count_line(&t->sdata, t->current_line);
+	//sieve_line_ptr(t);
+	sieve_lines(t);
+	t->ddata.min_sieved_val = 1ull << 31;
 
 	return;
 }
 
-uint64_t sieve(soe_staticdata_t* sdata, thread_soedata_t* thread_data,
-	uint32_t start_count, uint64_t* primes)
+uint64_t sieve(soe_staticdata_t* sdata, thread_soedata_t* thread_data)
 {
 	// sieve all classes of a block
 	int i;
@@ -3510,7 +4133,8 @@ uint64_t sieve(soe_staticdata_t* sdata, thread_soedata_t* thread_data,
 	}
 
 	// assign each thread a number of continguous blocks.
-	range = sdata->blocks / sdata->THREADS + ((sdata->blocks % sdata->THREADS) > 0);
+	range = sdata->blocks / sdata->THREADS; // +((sdata->blocks % sdata->THREADS) > 0);
+	if (range == 0) range = 1;
 	lastid = 0;
 	for (i = 0; i < sdata->THREADS; i++)
 	{
@@ -3518,24 +4142,27 @@ uint64_t sieve(soe_staticdata_t* sdata, thread_soedata_t* thread_data,
 
 		t->sdata = *sdata;
 		t->startid = lastid;
-		t->stopid = MAX(t->startid + range, sdata->blocks);
+		t->stopid = MIN(t->startid + range, sdata->blocks);
 		lastid = t->stopid;
 
 		if (sdata->VFLAG > 2)
 		{
-			printf("thread %d sieveing blocks %u to %u\n",
+			printf("thread %d sieving blocks %u to %u\n",
 				(int)i, t->startid, t->stopid);
 		}
 	}
 
+	sdata->num_found = 0;
 	udata.sdata = sdata;
 	udata.ddata = thread_data;
-	tpool_data = tpool_setup(sdata->THREADS, NULL, NULL, NULL,
+	tpool_data = tpool_setup(sdata->THREADS, NULL, NULL, &sieve_lines_sync,
 		&sieve_lines_dispatch, &udata);
 
 	if (sdata->THREADS == 1)
 	{
-		sieve_work_fcn(tpool_data);
+		sieve_lines_work_fcn(tpool_data);
+		sdata->num_found += thread_data[0].linecount;
+		sdata->min_sieved_val = 1ull << 31;
 	}
 	else
 	{

@@ -89,6 +89,12 @@ typedef struct
 	uint64_t orig_llimit;
 	uint64_t pbound;
 	uint64_t pboundi;
+	uint32_t medbound_16x;
+	uint32_t medbound_8x;
+	uint32_t medbound_4x;
+	uint32_t medbound_first_16x;
+	uint32_t medbound_first_8x;
+	uint32_t medbound_first_4x;
 
 	uint32_t bucket_start_id;
 	uint64_t large_bucket_start_prime;
@@ -155,6 +161,7 @@ typedef struct
 {
 	uint64_t *pbounds;
 	uint32_t *offsets;
+	uint32_t* initial_offsets;
 	uint64_t lblk_b;
 	uint64_t ublk_b;
 	uint64_t blk_b_sqrt;

@@ -944,38 +944,46 @@ void do_soe_sieving(soe_staticdata_t *sdata, thread_soedata_t *thread_data, int 
     sdata->num_found = 0;
     sdata->only_count = count;
 
-    udata.sdata = sdata;
-    udata.ddata = thread_data;
-    tpool_data = tpool_setup(sdata->THREADS, NULL, NULL, &sieve_sync,
-        &sieve_dispatch, &udata);
-
-    if (sdata->THREADS == 1)
+    if (0)
     {
-        thread_soedata_t *t = &thread_data[0];
-        sdata->sync_count = 0;
-        for (i = 0; i < sdata->numclasses; i++)
+
+        udata.sdata = sdata;
+        udata.ddata = thread_data;
+        tpool_data = tpool_setup(sdata->THREADS, NULL, NULL, &sieve_sync,
+            &sieve_dispatch, &udata);
+
+        if (sdata->THREADS == 1)
         {
-            t->current_line = i;
-            sieve_work_fcn(tpool_data);
-            sieve_sync(tpool_data);
-            sdata->sync_count++;
+            thread_soedata_t* t = &thread_data[0];
+            sdata->sync_count = 0;
+            for (i = 0; i < sdata->numclasses; i++)
+            {
+                t->current_line = i;
+                sieve_work_fcn(tpool_data);
+                sieve_sync(tpool_data);
+                sdata->sync_count++;
+            }
         }
+        else
+        {
+            sdata->sync_count = 0;
+            tpool_add_work_fcn(tpool_data, &sieve_work_fcn);
+            tpool_go(tpool_data);
+        }
+
+        if (sdata->VFLAG > 1)
+        {
+            gettimeofday(&tstop, NULL);
+            t = ytools_difftime(&tstart, &tstop);
+            printf("linesieve took %1.6f seconds\n", t);
+        }
+
+        free(tpool_data);
     }
     else
     {
-        sdata->sync_count = 0;
-        tpool_add_work_fcn(tpool_data, &sieve_work_fcn);
-        tpool_go(tpool_data);
+        sieve(sdata, thread_data);
     }
-
-	if (sdata->VFLAG > 1)
-	{
-		gettimeofday(&tstop, NULL);
-		t = ytools_difftime(&tstart, &tstop);
-		printf("linesieve took %1.6f seconds\n", t);
-	}
-    
-    free(tpool_data);
 
     // to test: make this a stop fcn
     for (i = 0; i < sdata->THREADS; i++)
@@ -993,48 +1001,7 @@ void finalize_sieve(soe_staticdata_t *sdata,
 
 	if (count)
 	{
-		//add in relevant sieving primes not captured in the flag arrays
-		uint64_t ui_offset;
-
-		if (sdata->sieve_range)
-		{
-            if (mpz_size(*sdata->offset) == 1)
-            {
-                ui_offset = mpz_get_ui(*sdata->offset);
-
-                if (ui_offset > sdata->pbound)
-                {
-                    // huge offset, we don't need to add any primes.
-                    ui_offset = 0;
-                    sdata->min_sieved_val = 0;
-                }
-            }
-			else
-			{
-				// huge offset, we don't need to add any primes.
-				ui_offset = 0;
-				sdata->min_sieved_val = 0;
-			}
-		}
-        else
-        {
-            ui_offset = 0;
-        }
-		
-        if (sdata->sieve_range)
-        {
-            sdata->min_sieved_val += ui_offset;
-        }
-
-        if (sdata->VFLAG > 2)
-        {
-            printf("num_found by main sieve = %lu\n", num_p);
-        }
-
-		// PRIMES is already sized appropriately by the wrapper
-		// load in the sieve primes that we need
-        //printf("min_sieved_val = %lu\n", sdata->min_sieved_val);
-        //printf("bucket_start_id = %u\n", sdata->bucket_start_id);
+		// add in relevant sieving primes not captured in the flag arrays
         if ((sdata->analysis == 2) && (sdata->is_main_sieve == 1))
         {
             // count twins from the stored sieve lines
@@ -1042,12 +1009,13 @@ void finalize_sieve(soe_staticdata_t *sdata,
 
             //printf("main sieve found %lu twins, adding twins within sieve primes\n", num_p);
             i = 0;
-            while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
+            while (((uint64_t)sdata->sieve_p[i] >= sdata->orig_llimit) &&
+                (i < sdata->presieve_max_id))
             {
                 // if we are doing twin prime or prime gap analysis 
                 // then do that analysis here for the sieving primes
                 // that are within the requested range.
-                if (sdata->sieve_p[i] >= (sdata->orig_llimit + ui_offset))
+                if (sdata->sieve_p[i] >= (sdata->orig_llimit))
                 {
                     if ((sdata->sieve_p[i + 1] - sdata->sieve_p[i]) == 2)
                     {
@@ -1062,13 +1030,10 @@ void finalize_sieve(soe_staticdata_t *sdata,
             // num_p holds the primes counted in the main sieve.
             // add in sieve primes that are within the requested interval.        
             i = 0;
-            while (((uint64_t)sdata->sieve_p[i] < sdata->min_sieved_val) && (i < sdata->bucket_start_id))
+            while (((uint64_t)sdata->sieve_p[i] >= sdata->orig_llimit) &&
+                (i < sdata->presieve_max_id))
             {
-                if (sdata->sieve_p[i] >= (sdata->orig_llimit + ui_offset))
-                {
-                    //printf("%u ", sdata->sieve_p[i]);
-                    num_p++;
-                }
+                num_p++;
                 i++;
             }
         }

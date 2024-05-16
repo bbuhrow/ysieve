@@ -237,7 +237,7 @@ void sieve_line_avx512_64k(thread_soedata_t* thread_data);
 void sieve_line_avx512_128k(thread_soedata_t* thread_data);
 void sieve_line_avx512_256k(thread_soedata_t* thread_data);
 void sieve_line_avx512_512k(thread_soedata_t* thread_data);
-
+uint64_t sieve(soe_staticdata_t* sdata, thread_soedata_t* thread_data);
 
 uint64_t count_line(soe_staticdata_t* sdata, uint32_t current_line);
 uint64_t count_twins(soe_staticdata_t* sdata, thread_soedata_t* thread_data);
@@ -247,6 +247,7 @@ uint32_t compute_32_bytes(soe_staticdata_t* sdata,
 uint64_t primes_from_lineflags(soe_staticdata_t* sdata, thread_soedata_t* thread_data,
     uint32_t start_count, uint64_t* primes);
 void get_offsets(thread_soedata_t* thread_data);
+void bucket_sort(thread_soedata_t* thread_data);
 void getRoots(soe_staticdata_t* sdata, thread_soedata_t* thread_data);
 void stop_soe_worker_thread(thread_soedata_t* t);
 void start_soe_worker_thread(thread_soedata_t* t);
