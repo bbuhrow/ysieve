@@ -983,6 +983,7 @@ void compute_roots_work_fcn(void *vptr)
     last_root = (uint32_t *)calloc(numclasses, sizeof(uint32_t));
     last_p = (uint32_t *)calloc(numclasses, sizeof(uint32_t));
 
+    class_inv = class_inv6;
     if (t->sdata.prodN == 6)
     {
         div_fcn = &div_by_6;
